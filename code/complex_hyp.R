@@ -38,6 +38,11 @@ library(mvtnorm)
 
 
 test_equality <- function(object, R_e = c(0, 1, 0), r_e = 0){
+  
+  #This function currently requires that R_e and r_e be input as vectors
+  #It can check hypotheses of the types "beta1 = 0", "beta1 = beta2" and "beta1 = beta2 = 0"
+  #These correspond to {R_e = c(0, 1, 0), r_e = 0}, {R_e = c(0, 1, -1), r_e = 0} and {R_e = c(0, 1, -1, 0, 1, 0), r_e = c(0, 0)}
+  #Also works with more or fewer variables
 
 #setup
 betahat <- object$coefficients # ML estimates for betas
@@ -48,47 +53,32 @@ k <- length(varnames) #varnames has DV but not intercept, but the length is the 
 n <- length(object$fitted.values) # df posterior = n - k
 b <- (k + 1) / n #df prior = nb - k
 
-R_e <- t(matrix(R_e, ncol = length(r_e))) #Input required as vector for now, should be in the shape of a matrix specifying which coefficients we are testing and how, see notes
-r_e <- as.matrix(r_e) #should be in the shape of a 1-col matrix specifying what values we are testing the coefficients against
+R_e <- matrix(R_e, nrow = length(r_e), byrow = TRUE) #should be in the shape of a matrix specifying which coefficients we are testing against what
+r_e <- matrix(r_e, ncol = length(r_e)) #specifying what values we are testing the coefficients against. NB! ncol(r_e) has to equl nrow(R_e)
 
-delta <- R_e %*% betahat #This is the value we're actually checking now
-delta_zero <- R_e %*% as.matrix(rep(0, k)) #What we're comparing against
+delta <- R_e %*% betahat #Posterior values we want to check
+delta_zero <- R_e %*% rep(0, k) #Prior values
 
+#Scale matrix components, had to separate them to calculate RX
 X <- model.matrix(object) #X-values including intercept
-
-RX <- as.vector(R_e %*% solve((t(X) %*% X)) %*% t(R_e)) #Needs to be vector for later calculations
-
-s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Using this gives correct result
+RX <- R_e %*% solve((t(X) %*% X)) %*% t(R_e) 
+s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Tried extracting s2 from vcov(object) but made some mistake, this gives correct result
 
 #Scale matrix for posterior t-distribution
-scale_m <- s2 * RX / (n - k)
+scale_m <- matrix(s2 * RX / (n - k), ncol = length(delta)) #ncol = number of effects, needs to be in matrix for dmvt
 
 #Scale matrix for prior t-distribution
-scale_star <- s2 * RX / (n*b - k)
+scale_star <- matrix(s2 * RX / (n*b - k), length(delta)) #ncol = number of effects, needs to be in matrix for dmvt
 
-#because the code of dmvt requires that ncol(x) == ncol(sigma) I had to convert these to matrices
-S1 <- as.matrix(scale_m) #posterior scale matrix value for beta1
-S2 <- as.matrix(scale_star) #prior scale matrix value for beta1
-
-#Hypothesis test, betahat[2] is beta1
-log_BF <- dmvt(x = r_e, delta = delta, sigma = S1, df = n - k, log = TRUE) - #using logs and backtransforming is more robust
-  dmvt(x = r_e, delta = delta_zero, sigma = S2, df = n*b - k, log = TRUE) 
+#Hypothesis test
+log_BF <- dmvt(x = r_e, delta = delta, sigma = scale_m, df = n - k, log = TRUE) - #using logs and backtransforming is more robust
+  dmvt(x = r_e, delta = delta_zero, sigma = scale_star, df = n*b - k, log = TRUE) 
 
 BF <- exp(log_BF)
 names(BF) <- "BF of 'beta1 = 0' versus 'beta1 != 0'"
 
 BF
 }
-
-
-##I need to find S^2 to be able to extract (X'X)^-1 from the vcov(object). DONE, better way?
-#methods(class = "lm") tells us which functions work. 
-# model.matrix(q) gives us the X-values.
-
-##Fixed my S2 and the RX calculations, now effect is consistent
-
-##Problem, ncol(x) needs to == ncol(sigma). previously I just used scale_m[2,2]
-##but what should I do now? Say I wish the check if beta1 == beta2, what do I use for sigma?
 
 #*************************************
 #Function to check if beta1 > 0----
@@ -100,6 +90,11 @@ library(mvtnorm)
 
 test_area <- function(object, R_e = c(0, 1, 0), r_e = 0){
   
+  #This function currently requires that R_e and r_e be input as vectors
+  #The dmvt function is not working, but the monte carlo draws seem to be working
+  #It can check hypotheses of the types "beta1 > 0"
+  #This corresponds to {R_e = c(0, 1, 0), r_e = 0}
+
   #setup
   betahat <- object$coefficients # ML estimates for betas
   varnames <- all.vars(object$terms) #all.vars(q$terms) provides the names of the object-formula objects, y is the first
@@ -109,62 +104,55 @@ test_area <- function(object, R_e = c(0, 1, 0), r_e = 0){
   n <- length(object$fitted.values) # df posterior = n - k
   b <- (k + 1) / n #df prior = nb - k
   
-  R_e <- t(matrix(R_e, ncol = length(r_e))) #Input required as vector for now, should be in the shape of a matrix specifying which coefficients we are testing and how, see notes
-  r_e <- r_e #For pmvt must be a vector contrary to for dmvt. Specifies our null hypotheses
-  
-  delta <- as.vector(R_e %*% betahat) #This is the value we're actually checking now
-  delta_zero <- as.vector(R_e %*% as.matrix(rep(0, k))) #What we're comparing against
-  
-  X <- model.matrix(object) #X-values including intercept
-  
-  RX <- as.vector(R_e %*% solve((t(X) %*% X)) %*% t(R_e)) #Needs to be vector for later calculations
+  R_e <- matrix(R_e, nrow = length(r_e), byrow = TRUE) #Input required as vector for now, should be in the shape of a matrix specifying which coefficients we are testing and how, see notes
+  r_e <- r_e #For pmvt must be a vector contrary to for dmvt.
 
+  
+  delta <- as.vector(R_e %*% betahat) #Posterior values we want to check
+  delta_zero <- as.vector(R_e %*% rep(0, k)) #Prior values
+  
+  #Scale matrix components
+  X <- model.matrix(object) #X-values including intercept
+  RX <- as.vector(R_e %*% solve((t(X) %*% X)) %*% t(R_e)) #Needs to be vector for later calculation
   s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Using this gives correct result
 
   #Scale matrix for posterior t-distribution
-  scale_m <- s2 * RX / (n - k)
+  scale_m <- matrix(s2 * RX / (n - k), ncol = length(delta)) #must be matrix for monte carlo draws
   
   #Scale matrix for prior t-distribution
-  scale_star <- s2 * RX / (n*b - k)
+  scale_star <- matrix(s2 * RX / (n*b - k), ncol = length(delta))
 
-  #Hypothesis test, sigma[2,2] refers to beta1. Pmvt requires delta, r_e and sigma to be vectors, pmvt also has different default type
-  BF_more_than <- pmvt(lower = r_e, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted") / #
-    pmvt(lower = r_e, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted") 
+  #Hypothesis test. [Gives error when testing only one coefficient, can't figure out why. Strange result when testing several] Pmvt requires delta and r_e to be vectors. Default type for pmvt is not "shifted" as we want so must be specified.
+  BF_more_than <- pmvt(lower = r_e, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted") / #These probabilities are not complementary to those below (testing several betas)
+    pmvt(lower = r_e, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted") #so obviously something is incorrect
   
   BF_less_than <- pmvt(lower = -Inf, upper = r_e, delta = delta, sigma = scale_m, df = n - k, type = "shifted") / #
     pmvt(lower = -Inf, upper = r_e, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted") 
   
   BF <- as.vector(BF_more_than / BF_less_than) #remove attributes cluttering output by turning into vector
   
-  #Alternative method using monte carlo draws, length(delta) == nrow(sigma) -> sigma must be matrix
-  #because the code of rmvt requires that ncol(x) == ncol(sigma) I had to convert these to matrices
-  S1 <- as.matrix(scale_m) #posterior scale matrix value for beta1
-  S2 <- as.matrix(scale_star) #prior scale matrix value for beta1
+  #Alternative method using monte carlo draws,[seems to work] length(delta) == nrow(sigma) -> sigma must be matrix
+  set.seed(56)
+  draws_post <- rmvt(n = 100, delta = delta, sigma = scale_m, df = n - k)
+  draws_pre <- rmvt(n = 100, delta = delta_zero, sigma = scale_star, df = n*b - k)
   
+  BF2 <- mean(draws_post > r_e) / mean(draws_pre > r_e)
   
-  set.seed(1)
-  draws_post <- rmvt(n = 1e4, delta = delta, sigma = S1, df = n - k)
-  draws_pre <- rmvt(n = 1e4, delta = delta_zero, sigma = S2, df = n*b - k)
-  
-  BF2 <- mean(draws_post > 0) / mean(draws_pre > 0)
-  
-  names(BF) <- "BF of 'beta1 > 0' versus 'beta1 < 0'"
+  names(BF) <- names(BF2) <-  "BF of 'beta1 > 0' versus 'beta1 < 0'"
   
   c(BF, BF2)
 }
 
 #currently function is testing if beta1 > 0 vs. beta1 < 0
 
-pmvt(lower = r_e, upper = Inf, delta = delta, corr = 1, df = n - k, type = "shifted") 
-
 #*************************************
 #Testing----
 #*************************************
-d <- sim_reg_data(c(2, 0.7))
+d <- sim_reg_data(c(0, 1))
 q <- lm(y ~ X1 + X2, data = d)
 
-test_equality(q)
+test_equality(q, c(0, 1, 0))
 test_area(q)
 
-R_e <- c(0, 0, 1)
-r_e <- c(0)
+R_e <- c(0, 1, 0, 0, 0, 1)
+r_e <- c(0, 0 )
