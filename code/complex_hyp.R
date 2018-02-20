@@ -56,23 +56,19 @@ delta_zero <- R_e %*% as.matrix(rep(0, k)) #What we're comparing against
 
 X <- model.matrix(object) #X-values including intercept
 
-RX <- as.vector(R_e %*% (t(X) %*% X)^-1 %*% t(R_e)) #Needs to be vector for later calculations
+RX <- as.vector(R_e %*% solve((t(X) %*% X)) %*% t(R_e)) #Needs to be vector for later calculations
 
-s2 <- vcov(object) * (n - k) * (t(X) %*% X)
+s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Using this gives correct result
 
 #Scale matrix for posterior t-distribution
 scale_m <- s2 * RX / (n - k)
 
-# scale_m <- vcov(object)
-
 #Scale matrix for prior t-distribution
 scale_star <- s2 * RX / (n*b - k)
 
-# scale_star <- vcov(object) * (n - k) / (n*b - k)
-
 #because the code of dmvt requires that ncol(x) == ncol(sigma) I had to convert these to matrices
-S1 <- as.matrix(scale_m[2,2]) #posterior scale matrix value for beta1
-S2 <- as.matrix(scale_star[2,2]) #prior scale matrix value for beta1
+S1 <- as.matrix(scale_m) #posterior scale matrix value for beta1
+S2 <- as.matrix(scale_star) #prior scale matrix value for beta1
 
 #Hypothesis test, betahat[2] is beta1
 log_BF <- dmvt(x = r_e, delta = delta, sigma = S1, df = n - k, log = TRUE) - #using logs and backtransforming is more robust
@@ -87,13 +83,15 @@ BF
 
 ##I need to find S^2 to be able to extract (X'X)^-1 from the vcov(object). DONE, better way?
 #methods(class = "lm") tells us which functions work. 
-# model.matrix(q) gives us the X-values
+# model.matrix(q) gives us the X-values.
+
+##Fixed my S2 and the RX calculations, now effect is consistent
 
 ##Problem, ncol(x) needs to == ncol(sigma). previously I just used scale_m[2,2]
 ##but what should I do now? Say I wish the check if beta1 == beta2, what do I use for sigma?
 
 #*************************************
-#Function to check if beta1  > 0----
+#Function to check if beta1 > 0----
 #*************************************
 #Requires mvtnorm
 if(!require("mvtnorm")){install.packages("mvtnorm")}
@@ -119,38 +117,45 @@ test_area <- function(object, R_e = c(0, 1, 0), r_e = 0){
   
   X <- model.matrix(object) #X-values including intercept
   
-  RX <- as.vector(R_e %*% (t(X) %*% X)^-1 %*% t(R_e)) #Needs to be vector for later calculations
-  
-  s2 <- vcov(object) * (n - k) * (t(X) %*% X)
-  
+  RX <- as.vector(R_e %*% solve((t(X) %*% X)) %*% t(R_e)) #Needs to be vector for later calculations
+
+  s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Using this gives correct result
+
   #Scale matrix for posterior t-distribution
   scale_m <- s2 * RX / (n - k)
   
-  # scale_m <- vcov(object)
-  
   #Scale matrix for prior t-distribution
   scale_star <- s2 * RX / (n*b - k)
+
+  #Hypothesis test, sigma[2,2] refers to beta1. Pmvt requires delta, r_e and sigma to be vectors, pmvt also has different default type
+  BF_more_than <- pmvt(lower = r_e, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted") / #
+    pmvt(lower = r_e, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted") 
   
-  # scale_star <- vcov(object) * (n - k) / (n*b - k)
-  
-  #because the code of dmvt requires that ncol(x) == ncol(sigma) I had to convert these to matrices
-  # S1 <- as.matrix(scale_m[2,2]) #posterior scale matrix value for beta1
-  # S2 <- as.matrix(scale_star[2,2]) #prior scale matrix value for beta1
-  
-  #Hypothesis test, sigma[2,2] refers to beta1. Pmvt requires delta, r_e and sigma to be vectors..
-  BF_more_than <- pmvt(lower = r_e, upper = Inf, delta = delta, sigma = scale_m[2, 2], df = n - k) / #
-    pmvt(lower = r_e, upper = Inf, delta = delta_zero, sigma = scale_star[2,2], df = n*b - k) 
-  
-  BF_less_than <- pmvt(lower = -Inf, upper = r_e, delta = delta, sigma = scale_m[2, 2], df = n - k) / #
-    pmvt(lower = -Inf, upper = r_e, delta = delta_zero, sigma = scale_star[2,2], df = n*b - k) 
+  BF_less_than <- pmvt(lower = -Inf, upper = r_e, delta = delta, sigma = scale_m, df = n - k, type = "shifted") / #
+    pmvt(lower = -Inf, upper = r_e, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted") 
   
   BF <- as.vector(BF_more_than / BF_less_than) #remove attributes cluttering output by turning into vector
+  
+  #Alternative method using monte carlo draws, length(delta) == nrow(sigma) -> sigma must be matrix
+  #because the code of rmvt requires that ncol(x) == ncol(sigma) I had to convert these to matrices
+  S1 <- as.matrix(scale_m) #posterior scale matrix value for beta1
+  S2 <- as.matrix(scale_star) #prior scale matrix value for beta1
+  
+  
+  set.seed(1)
+  draws_post <- rmvt(n = 1e4, delta = delta, sigma = S1, df = n - k)
+  draws_pre <- rmvt(n = 1e4, delta = delta_zero, sigma = S2, df = n*b - k)
+  
+  BF2 <- mean(draws_post > 0) / mean(draws_pre > 0)
+  
   names(BF) <- "BF of 'beta1 > 0' versus 'beta1 < 0'"
   
-  BF
+  c(BF, BF2)
 }
 
 #currently function is testing if beta1 > 0 vs. beta1 < 0
+
+pmvt(lower = r_e, upper = Inf, delta = delta, corr = 1, df = n - k, type = "shifted") 
 
 #*************************************
 #Testing----
@@ -160,3 +165,6 @@ q <- lm(y ~ X1 + X2, data = d)
 
 test_equality(q)
 test_area(q)
+
+R_e <- c(0, 0, 1)
+r_e <- c(0)
