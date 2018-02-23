@@ -30,7 +30,7 @@ sim_reg_data <- function(betas, intercept = 0,  sigma2 = 1, n = 100){
 ##Possible refinements: Other defaults?
 
 #*************************************
-#Function to check if beta1 == 0----
+#Function to test equality constraints----
 #*************************************
 #Requires mvtnorm
 if(!require("mvtnorm")){install.packages("mvtnorm")}
@@ -75,13 +75,15 @@ log_BF <- dmvt(x = r_e, delta = delta, sigma = scale_m, df = n - k, log = TRUE) 
   dmvt(x = r_e, delta = delta_zero, sigma = scale_star, df = n*b - k, log = TRUE) 
 
 BF <- exp(log_BF)
-names(BF) <- "BF of 'beta1 = 0' versus 'beta1 != 0'"
+
+# names(BF) <- "BF of 'beta1 = 0' versus 'beta1 != 0'" #needs to be generalized depending on input R_e
+names(BF) <- "BF" #temporary
 
 BF
 }
 
 #*************************************
-#Function to check if beta1 > 0----
+#Function to test inequality constraints----
 #*************************************
 #Requires mvtnorm
 if(!require("mvtnorm")){install.packages("mvtnorm")}
@@ -91,9 +93,9 @@ library(mvtnorm)
 test_area <- function(object, R_e = c(0, 1, 0), r_e = 0){
   
   #This function currently requires that R_e and r_e be input as vectors
-  #The dmvt function is not working, but the monte carlo draws seem to be working
-  #It can check hypotheses of the types "beta1 > 0"
-  #This corresponds to {R_e = c(0, 1, 0), r_e = 0}
+  #It can check hypotheses of the types "beta1 > 0" and "beta1 > 0, beta2 > 0"
+  #This corresponds to {R_e = c(0, 1, 0), r_e = 0} and {R_e = c(0, 1, 0, 0, 0, 1), r_e = c(0, 0)}
+  #Also works with more variables
 
   #setup
   betahat <- object$coefficients # ML estimates for betas
@@ -122,37 +124,47 @@ test_area <- function(object, R_e = c(0, 1, 0), r_e = 0){
   #Scale matrix for prior t-distribution
   scale_star <- matrix(s2 * RX / (n*b - k), ncol = length(delta))
 
-  #Hypothesis test. [Gives error when testing only one coefficient, can't figure out why. Strange result when testing several] Pmvt requires delta and r_e to be vectors. Default type for pmvt is not "shifted" as we want so must be specified.
-  BF_more_than <- pmvt(lower = r_e, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted") / #These probabilities are not complementary to those below (testing several betas)
-    pmvt(lower = r_e, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted") #so obviously something is incorrect
+  #Hypothesis test using exact values
+  if(nrow(scale_m) == 1){ #If univariate
+    BF <- pt((r_e - delta) / sqrt(scale_m), df = n - k, lower.tail = FALSE)[1] / #posterior
+      pt((r_e - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = FALSE)[1] #prior
+  } else { #if multivariate
+  BF <- pmvt(lower = r_e, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
+    pmvt(lower = r_e, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
+  }
   
-  BF_less_than <- pmvt(lower = -Inf, upper = r_e, delta = delta, sigma = scale_m, df = n - k, type = "shifted") / #
-    pmvt(lower = -Inf, upper = r_e, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted") 
+  #Alternative method using monte carlo draws
+  draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
+  satisfied_post <- draws_post[,1] > r_e[1] #checks which posterior draws satisfy first constraint
   
-  BF <- as.vector(BF_more_than / BF_less_than) #remove attributes cluttering output by turning into vector
+  draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
+  satisfied_pre <- draws_pre[,1] > r_e[1] #checks which prior draws satisfy first constraint
   
-  #Alternative method using monte carlo draws,[seems to work] length(delta) == nrow(sigma) -> sigma must be matrix
-  set.seed(56)
-  draws_post <- rmvt(n = 100, delta = delta, sigma = scale_m, df = n - k)
-  draws_pre <- rmvt(n = 100, delta = delta_zero, sigma = scale_star, df = n*b - k)
+  if(nrow(R_e) > 1){ #check if more than one constraint
+  for(c in 2:length(r_e)){ #for every additional constraint
+    satisfied_post <- satisfied_post * (draws_post[, c] > r_e[c]) #Check which posterior draws fulfill all constraints
+    satisfied_pre <- satisfied_pre * (draws_pre[, c] > r_e[c]) #Check which prior draws fulfill all constraints
+     }
+  }
   
-  BF2 <- mean(draws_post > r_e) / mean(draws_pre > r_e)
+  BF2 <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraints
   
-  names(BF) <- names(BF2) <-  "BF of 'beta1 > 0' versus 'beta1 < 0'"
+  names(BF) <-  "BF pmvt" #needs to be generalized depending on input R_e
+  names(BF2) <-  "BF Monte carlo" #needs to be generalized depending on input R_e
   
-  c(BF, BF2)
+  list("beta1 > 0, beta2 > 0", BF, BF2)
 }
 
-#currently function is testing if beta1 > 0 vs. beta1 < 0
-
 #*************************************
-#Testing----
+#Testing functions----
 #*************************************
-d <- sim_reg_data(c(0, 1))
-q <- lm(y ~ X1 + X2, data = d)
+d <- sim_reg_data(c(0.2, 0.1))
+q <- lm(y ~ X1 + X2 + X3, data = d)
 
-test_equality(q, c(0, 1, 0))
-test_area(q)
+test_equality(q, R_e = c(0, 1, -1, 0, 0, 1), r_e = c(0, 0)) #beta1 == beta2 == 0?
+test_area(q, R_e = c(0, 0, 1, 0, 1, 0), r_e = c(0, 0)) #beta1 > 0, beta2 > 0?
 
-R_e <- c(0, 1, 0, 0, 0, 1)
-r_e <- c(0, 0 )
+#for troubleshooting if necessary
+object <- q
+R_e <- c(0, 1, 0) 
+r_e <- c(0)
