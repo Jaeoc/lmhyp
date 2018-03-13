@@ -65,10 +65,10 @@ RX <- R_e %*% solve((t(X) %*% X)) %*% t(R_e)
 s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Tried extracting s2 from vcov(object) but made some mistake, this gives correct result
 
 #Scale matrix for posterior t-distribution
-scale_m <- matrix(s2 * RX / (n - k), ncol = length(delta)) #ncol = number of effects, needs to be in matrix for dmvt
+scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_e)) #ncol = number of effects, needs to be in matrix for dmvt
 
 #Scale matrix for prior t-distribution
-scale_star <- matrix(s2 * RX / (n*b - k), length(delta)) #ncol = number of effects, needs to be in matrix for dmvt
+scale_star <- matrix(s2 * RX / (n*b - k), nrow(R_e)) #ncol = number of effects, needs to be in matrix for dmvt
 
 #Hypothesis test
 log_BF <- dmvt(x = r_e, delta = delta, sigma = scale_m, df = n - k, log = TRUE) - #using logs and backtransforming is more robust
@@ -119,10 +119,10 @@ test_area <- function(object, R_e = c(0, 1, 0), r_e = 0){
   s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Using this gives correct result
 
   #Scale matrix for posterior t-distribution
-  scale_m <- matrix(s2 * RX / (n - k), ncol = length(delta)) #must be matrix for monte carlo draws
+  scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_e)) #must be matrix for monte carlo draws
   
   #Scale matrix for prior t-distribution
-  scale_star <- matrix(s2 * RX / (n*b - k), ncol = length(delta))
+  scale_star <- matrix(s2 * RX / (n*b - k), ncol = nrow(R_e))
 
   #Hypothesis test using exact values
   if(nrow(scale_m) == 1){ #If univariate
@@ -135,17 +135,10 @@ test_area <- function(object, R_e = c(0, 1, 0), r_e = 0){
   
   #Alternative method using monte carlo draws
   draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
-  satisfied_post <- draws_post[,1] > r_e[1] #checks which posterior draws satisfy first constraint
-  
+  satisfied_post2 <- apply(draws_post > r_e, 1, prod) #checks which posterior draws satisfy constraints
+
   draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
-  satisfied_pre <- draws_pre[,1] > r_e[1] #checks which prior draws satisfy first constraint
-  
-  if(nrow(R_e) > 1){ #check if more than one constraint
-  for(c in 2:length(r_e)){ #for every additional constraint
-    satisfied_post <- satisfied_post * (draws_post[, c] > r_e[c]) #Check which posterior draws fulfill all constraints
-    satisfied_pre <- satisfied_pre * (draws_pre[, c] > r_e[c]) #Check which prior draws fulfill all constraints
-     }
-  }
+  satisfied_pre <- apply(draws_pre > r_e, 1, prod) #checks which prior draws satisfy constraints
   
   BF2 <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraints
   
@@ -159,7 +152,7 @@ test_area <- function(object, R_e = c(0, 1, 0), r_e = 0){
 #Testing functions----
 #*************************************
 d <- sim_reg_data(c(0.2, 0.1))
-q <- lm(y ~ X1 + X2 + X3, data = d)
+q <- lm(y ~ X1 + X2, data = d)
 
 test_equality(q, R_e = c(0, 1, -1, 0, 0, 1), r_e = c(0, 0)) #beta1 == beta2 == 0?
 test_area(q, R_e = c(0, 0, 1, 0, 1, 0), r_e = c(0, 0)) #beta1 > 0, beta2 > 0?
