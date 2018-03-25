@@ -4,7 +4,7 @@
 
 
 #****************************************
-#This function takes as input a hypothesis in the as a string e.g.,
+#This function takes as input a linear model object, and hypothesis as a string e.g.,
 hyp <- "X1 > X2 = X3 > X4 = 2"
 #Where each variable must contain at least one letter
 #and each variable is checked against those in the linear model object
@@ -12,6 +12,7 @@ hyp <- "X1 > X2 = X3 > X4 = 2"
 #These symbols have to be single (i.e., not == or =>)
 #comparisons are read from left to right in input string
 #Output is a list with restriction matrices for equality and inequality (> or <) comparisons
+
 
 #*************************************
 #Testing purposes- function to simulate regression data----
@@ -43,16 +44,16 @@ d <- sim_reg_data(c(0.2, 0.1))
 q <- lm(y ~ X1 + X2, data = d)
 object <- q
 
-hyp <- "X1 > X2 = X3 > X4 = 2"
-
-varnames <- variable.names(object) #provides the variable names of the object, including intercept
-if(is.null(varnames)) stop("Please input proper linear model object")
+hyp <- "X1 > X2 = 2 = 2"
 
 #***************************************************
 #Function string-to-matrices----
 #***************************************************
 
-create_matrices <- function(hyp){
+create_matrices <- function(object, hyp){
+  
+  varnames <- variable.names(object) #provides the variable names of the linear model object, including intercept
+  if(is.null(varnames)) stop("Please input proper linear model object")
  
   hyp <- gsub(" ", "", hyp) #removes all whitespace
   if(!grepl("^[0-9a-zA-Z><=]+$", hyp)) stop("Impermissable characters in hypotheses. Only letters, numbers and '> < = ' permitted") #Self-explanatory
@@ -85,6 +86,7 @@ create_matrices <- function(hyp){
     } else{
       outcomes <- suppressWarnings(apply(equality[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
       outcomes <- matrix(outcomes, ncol = 2, byrow = TRUE) #Conversion to matrix in case there was only one row in outcomes
+      if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 = 2', check hypotheses")
       cols <- which(rowSums(is.na(outcomes)) < 2) #which columns contain a numeric value (comparing variable to value), that is not two NA-values
       specified <- t(outcomes[cols,]) #transpose so that specified comparison values are extracted in correct order below
       specified <- specified[!is.na(specified)] #extract specified comparison values
@@ -112,10 +114,11 @@ create_matrices <- function(hyp){
   
   #For greater_than
   if(nrow(greater_than) == 0) { #If there are no '>' comparisons set to NULL
-    inequality_geq <- NULL
+    geq <- NULL #outcome of loop
     } else{
       outcomes <- suppressWarnings(apply(greater_than[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
       outcomes <- matrix(outcomes, ncol = 2, byrow = TRUE) #Conversion to matrix in case there was only one row in outcomes
+      if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 > 2', check hypotheses")
       cols <- which(rowSums(is.na(outcomes)) < 2) #which columns contain a numeric value (comparing variable to value), that is not two NA-values
       specified <- t(outcomes[cols,]) #transpose so that specified comparison values are extracted in correct order below
       specified <- specified[!is.na(specified)] #extract specified comparison values
@@ -134,15 +137,16 @@ create_matrices <- function(hyp){
           }
         }
   
-      inequality_geq <- list(R_i = R_i, r_i = r_i) #list with greater or equal
+      geq <- list(R_i = R_i, r_i = r_i) #list with greater or equal
       }
   
   #For less_than
   if(nrow(less_than) == 0) { #If there are no '<' comparisons set to NULL
-    inequality_leq <- NULL
+    leq <- NULL #outcome of loop
     } else{
       outcomes <- suppressWarnings(apply(less_than[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
       outcomes <- matrix(outcomes, ncol = 2, byrow = TRUE) #Conversion to matrix in case there was only one row in outcomes
+      if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 < 2', check hypotheses")
       cols <- which(rowSums(is.na(outcomes)) < 2) #which columns contain a numeric value (comparing variable to value), that is not two NA-values
       specified <- t(outcomes[cols,]) #transpose so that specified comparison values are extracted in correct order below
       specified <- specified[!is.na(specified)] #extract specified comparison values
@@ -161,25 +165,16 @@ create_matrices <- function(hyp){
           }
         }
   
-      inequality_leq <- list(R_i = R_i, r_i = r_i) #list with less or equal to
+      leq <- list(R_i = R_i, r_i = r_i) #list with less or equal to
       }
   
+  if(is.null(geq) && is.null(leq)){
+    list_inequality <- NULL #If no inequality comparisons, set to null
+  } else{
+    list_inequality <- list(geq = geq, leq = leq)
+  }
   
-  matrices <- list(equality = list_equality, inequality_geq = inequality_geq, inequality_leq = inequality_leq)
+  matrices <- list(equality = list_equality, inequality = list_inequality) #final output
   
 }
  
-
-#Things I've learnt
-strsplit(hyp, split = ">")[[1]] #Gives a list with a character vector split by ">"
-strsplit(hyp, split = c("[>=]")) #If want to do several put them in []
-grepl("\\d", hyp) #checks if there are any digits in the vector (TRUE/FALSE)
-grep("X", hyp) #returns the position instead of a logical
-grep("[a-zA-Z]+", step1) #check which subunit contains at least one letter https://stackoverflow.com/questions/3617797/regex-to-match-only-letters
-grepl("^[0-9a-zA-Z><=,]+$", hyp) #Here we look only for things contained in [], 'start with' (^) and 'end with' ($) anything instide [] any number of times (+) 
-if(all(input_vars %in% varnames)) #if requires one TRUE/FALSE, 'all' checks if all logicals are TRUE
-gsub("([>=])","~\\1~",hyp) #surrounds the matched pattern by ~ which means the >= can be extracted in strsplit if desired
-gregexpr("[>=]", hyp) #gregexpr gives us the positions of all matches (regexpr of only first), nice to use wiht unlist()
-substring(hyp, pos) #By default extracts from the position (inclusive) until the end
-#+ #matches something one or more times
-if(!grepl("[><=]{2,}", hyp)) print("yay") else print("booh!") #{n, } #matches something at least n times
