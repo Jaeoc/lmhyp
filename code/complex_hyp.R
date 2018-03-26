@@ -1,4 +1,5 @@
 #Internship 3 - Joris Mulder, complex hypothesis testing with Bayes Factor
+#Script purpose: Function to examine complex hypothesis for lm objects with a reasonable prior and BF as output
 #Code: Anton Ohlsson Collentine
 
 #*************************************
@@ -8,17 +9,17 @@ sim_reg_data <- function(betas, intercept = 0,  sigma2 = 1, n = 100){
   beta <- c(intercept, betas)
   Xmat <- matrix(NA, nrow = n, ncol = length(beta)) #prepare the data matrix for predictors
   Xmat[,1] <- 1 #intercept
-
+  
   #generate predictor data
   Xmat[,-1] <- rnorm((length(beta)-1)*n)
   
   #Generate error
   error <- rnorm(n,sd=sqrt(sigma2))
-
+  
   #generate outcome variables as a linear function
   #of the predictors
   y <-  Xmat %*% beta + error #matrix multiplicaton
-
+  
   dat <- data.frame(Xmat, y) #Put into dataframe because lm function requires dataframe format
   names(dat)[1:length(beta)] <- paste0("X", 0:(length(beta)-1)) #for clarity change names so that intercept is "X0"
   dat
@@ -30,252 +31,392 @@ sim_reg_data <- function(betas, intercept = 0,  sigma2 = 1, n = 100){
 ##Possible refinements: Other defaults?
 
 #*************************************
-#Function to test equality constraints----
+#Hypothesis testing function----
 #*************************************
 #Requires mvtnorm
 if(!require("mvtnorm")){install.packages("mvtnorm")}
 library(mvtnorm)
 
+#Parts of function
+#[0) check if several hypotheses? (i.e., comma), if so loop over everything]
+#1) Common object setup, [gives warning if improper lm object input]
+#2) convert input into matrices, [gives warnings if hypothesis input improperly]
+#3) Check which (if any) of the constraints matrices are NULL and choose computation option based on that
+#**3.1) Only equality comparisons
+#**3.2) Only inequality comparisons
+#**3.3) both
+#END
 
-test_equality <- function(object, R_e = c(0, 1, 0), r_e = 0){
+hyp_test <- function(object, hyp){
   
-  #This function currently requires that R_e and r_e be input as vectors
-  #It can check hypotheses of the types "beta1 = 0", "beta1 = beta2" and "beta1 = beta2 = 0"
-  #These correspond to {R_e = c(0, 1, 0), r_e = 0}, {R_e = c(0, 1, -1), r_e = 0} and {R_e = c(0, 1, -1, 0, 1, 0), r_e = c(0, 0)}
-  #Also works with more or fewer variables
-
-#setup
-betahat <- object$coefficients # ML estimates for betas
-varnames <- variable.names(object) #provides the variable names of the object, including intercept
-
-k <- length(varnames) #varnames has DV but not intercept, but the length is the same as the number of parameters
-n <- length(object$fitted.values) # df posterior = n - k
-b <- (k + 1) / n #df prior = nb - k
-
-R_e <- matrix(R_e, nrow = length(r_e), byrow = TRUE) #should be in the shape of a matrix specifying which coefficients we are testing against what
-r_e <- matrix(r_e, ncol = length(r_e)) #specifying what values we are testing the coefficients against. NB! ncol(r_e) has to equl nrow(R_e)
-
-delta <- R_e %*% betahat #Posterior values we want to check
-delta_zero <- R_e %*% rep(0, k) #Prior values
-
-#Scale matrix components, had to separate them to calculate RX
-X <- model.matrix(object) #X-values including intercept
-RX <- R_e %*% solve((t(X) %*% X)) %*% t(R_e) 
-s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Tried extracting s2 from vcov(object) but made some mistake, this gives correct result
-
-#Scale matrix for posterior t-distribution
-scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_e)) #ncol = number of effects, needs to be in matrix for dmvt
-
-#Scale matrix for prior t-distribution
-scale_star <- matrix(s2 * RX / (n*b - k), nrow(R_e)) #ncol = number of effects, needs to be in matrix for dmvt
-
-#Hypothesis test
-log_BF <- dmvt(x = r_e, delta = delta, sigma = scale_m, df = n - k, log = TRUE) - #using logs and backtransforming is more robust
-  dmvt(x = r_e, delta = delta_zero, sigma = scale_star, df = n*b - k, log = TRUE) 
-
-BF <- exp(log_BF)
-
-# names(BF) <- "BF of 'beta1 = 0' versus 'beta1 != 0'" #needs to be generalized depending on input R_e
-names(BF) <- "BF" #temporary
-
-BF
-}
-
-#*************************************
-#Function to test inequality constraints----
-#*************************************
-#Requires mvtnorm
-if(!require("mvtnorm")){install.packages("mvtnorm")}
-library(mvtnorm)
-
-
-test_inequality <- function(object, R_i = c(0, 1, 0), r_i = 0){
-  
-  #This function currently requires that R_i and r_i be input as vectors
-  #It can check hypotheses of the types "beta1 > 0" and "beta1 > 0, beta2 > 0"
-  #This corresponds to {R_i = c(0, 1, 0), r_i = 0} and {R_i = c(0, 1, 0, 0, 0, 1), r_i = c(0, 0)}
-  #Also works with more variables
-
-  #setup
-  betahat <- object$coefficients # ML estimates for betas
+  #1) setup----
   varnames <- variable.names(object) #provides the variable names of the object, including intercept
+  if(is.null(varnames)) stop("Please input proper linear model object")
+  betahat <- object$coefficients # ML estimates for betas
   
-  k <- length(varnames) #varnames has DV but not intercept, but the length is the same as the number of parameters
+  k <- length(varnames) #varnames length is the same as the number of parameters
   n <- length(object$fitted.values) # df posterior = n - k
   b <- (k + 1) / n #df prior = nb - k
   
-  R_i <- matrix(R_i, nrow = length(r_i), byrow = TRUE) #Input required as vector for now, should be in the shape of a matrix specifying which coefficients we are testing and how, see notes
-  r_i <- r_i #For pmvt must be a vector contrary to for dmvt.
-
+  #2)hyp-to-matrices----
+  hyp2 <- gsub(" ", "", hyp) #removes all whitespace
+  if(!grepl("^[0-9a-zA-Z><=]+$", hyp2)) stop("Impermissable characters in hypotheses. Only letters, numbers and '> < = ' permitted") #Self-explanatory
+  if(grepl("[><=]{2,}", hyp2)) stop("Do not use combined comparison signs e.g., '>=' or '=='")
   
-  delta <- as.vector(R_i %*% betahat) #Posterior values we want to check
-  delta_zero <- as.vector(R_i %*% rep(0, k)) #Prior values
+  step1 <- unlist(strsplit(hyp2, split = "[<>=]")) #split by comparison signs and unlist
+  input_vars <- step1[grep("[a-zA-Z]+", step1)] #extract subunits that contain at least one letter
+  if(!all(input_vars %in% varnames)) stop("Hypothesis variable(s) not in object, check spelling") #Checks if input variables exist in lm-object
   
-  #Scale matrix components
-  X <- model.matrix(object) #X-values including intercept
-  RX <- as.vector(R_i %*% solve((t(X) %*% X)) %*% t(R_i)) #Needs to be vector for later calculation
-  s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Using this gives correct result
-
-  #Scale matrix for posterior t-distribution
-  scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_i)) #must be matrix for monte carlo draws
+  pos_comparisons <- unlist(gregexpr("[<>=]", hyp2)) #Gives the positions of all comparison signs
+  left <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+  right <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+  pos1 <- c(-1, pos_comparisons) #positions to extract data to the left of comparisons
+  pos2 <- c(pos_comparisons, nchar(hyp2) + 1) #positions to extract data to the right of comparisons
+  for(i in seq_along(pos1)){
+    left[i] <- substring(hyp2, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the left of a comparison sign
+    right[i] <- substring(hyp2, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the right of a comparison sign
+  }
+  left <- left[-length(left)] #remove last element which is a NA due to loop formatting
+  right <- right[-length(right)] #remove last element which is a NA due to loop formatting
+  comparisons <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
+  framed <- data.frame(left = left, comp = comparisons, right = right, stringsAsFactors = FALSE) #hypotheses as a dataframe
   
-  #Scale matrix for prior t-distribution
-  scale_star <- matrix(s2 * RX / (n*b - k), ncol = nrow(R_i))
-
-  #Hypothesis test using exact values
-  if(nrow(scale_m) == 1){ #If univariate
-    BF <- pt((r_i - delta) / sqrt(scale_m), df = n - k, lower.tail = FALSE)[1] / #posterior
-      pt((r_i - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = FALSE)[1] #prior
-  } else { #if multivariate
-  BF <- pmvt(lower = r_i, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
-    pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
+  equality <- framed[framed$comp == "=",]
+  inequality <- framed[!framed$comp == "=",]
+  
+  #********Equality
+  if(nrow(equality) == 0) { #If there are no '=' comparisons set to NULL
+    list_equality <- NULL
+  } else{
+    outcomes <- suppressWarnings(apply(equality[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
+    outcomes <- matrix(outcomes, ncol = 2, byrow = TRUE) #Conversion to matrix in case there was only one row in outcomes
+    if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 = 2', check hypotheses")
+    cols <- which(rowSums(is.na(outcomes)) < 2) #which columns contain a numeric value (comparing variable to value), that is not two NA-values
+    specified <- t(outcomes[cols,]) #transpose so that specified comparison values are extracted in correct order below
+    specified <- specified[!is.na(specified)] #extract specified comparison values
+    r_e <- ifelse(rowSums(is.na(outcomes)) == 2, 0, specified) #If variable = variable -> 0, if variable = value -> value
+    r_e <- matrix(r_e, ncol = length(r_e)) #convert to matrix
+    
+    var_locations <- t(apply(equality[, -2], 1, function(x) ifelse(x %in% varnames, which(varnames %in% x), 0))) #convert non-variables to NA, only worked with rows but gets transposed
+    
+    R_e <- matrix(rep(0, nrow(equality)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
+    
+    for(i in seq_along(r_e)){ # for each row i in R_e, replace the columns specified in var_locations row i
+      if(!all(var_locations[i, ] > 0)){ #If only one variable is specified (i.e., other one is set to zero)
+        R_e[i, var_locations[i,]] <- 1 #Set this variable to 1 in R_e row i
+      } else{ #If two variables specified
+        R_e[i, var_locations[i,]] <- c(1, -1) #Set one column to 1 and the other to -1 in R_e row i
+      }
+    }
+    list_equality <- list(R_e = R_e, r_e = r_e) #Note column 1 in R_e is for intercept
   }
   
-  #Alternative method using monte carlo draws
-  draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
-  satisfied_post2 <- apply(draws_post > r_i, 1, prod) #checks which posterior draws satisfy constraints
-
-  draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
-  satisfied_pre <- apply(draws_pre > r_i, 1, prod) #checks which prior draws satisfy constraints
   
-  BF2 <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraints
+  #**************Inequality
+  greater_than <- inequality[inequality$comp == ">",] #Separate between greater than 
+  less_than <- inequality[inequality$comp == "<",] #and less than comparisons
   
-  names(BF) <-  "BF pmvt" #needs to be generalized depending on input R_i
-  names(BF2) <-  "BF Monte carlo" #needs to be generalized depending on input R_i
+  #For greater_than
+  if(nrow(greater_than) == 0) { #If there are no '>' comparisons set to NULL
+    geq <- NULL #outcome of loop
+  } else{
+    outcomes <- suppressWarnings(apply(greater_than[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
+    outcomes <- matrix(outcomes, ncol = 2, byrow = TRUE) #Conversion to matrix in case there was only one row in outcomes
+    if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 > 2', check hypotheses")
+    cols <- which(rowSums(is.na(outcomes)) < 2) #which columns contain a numeric value (comparing variable to value), that is not two NA-values
+    specified <- t(outcomes[cols,]) #transpose so that specified comparison values are extracted in correct order below
+    specified <- specified[!is.na(specified)] #extract specified comparison values
+    r_i <- ifelse(rowSums(is.na(outcomes)) == 2, 0, specified) #If variable = variable -> 0, if variable = value -> value
+    r_i <- matrix(r_i, ncol = length(r_i)) #convert to matrix
+    
+    var_locations <- t(apply(greater_than[, -2], 1, function(x) ifelse(x %in% varnames, which(varnames %in% x), 0))) #convert non-variables to NA, only worked with rows but gets transposed
+    
+    R_i <- matrix(rep(0, nrow(greater_than)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
+    
+    for(i in seq_along(r_i)){ # for each row i in R_i, replace the columns specified in var_locations row i
+      if(!all(var_locations[i, ] > 0)){ #If only one variable is specified (i.e., other one is set to zero)
+        R_i[i, var_locations[i,]] <- 1 #Set this variable to 1 in R_i row i
+      } else{ #If two variables specified
+        R_i[i, var_locations[i,]] <- c(1, -1) #Set one column to 1 and the other to -1 in R_i row i
+      }
+    }
+    
+    geq <- list(R_i = R_i, r_i = r_i) #list with greater or equal
+  }
   
-  list("beta1 > 0, beta2 > 0", BF, BF2)
+  #For less_than
+  if(nrow(less_than) == 0) { #If there are no '<' comparisons set to NULL
+    leq <- NULL #outcome of loop
+  } else{
+    outcomes <- suppressWarnings(apply(less_than[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
+    outcomes <- matrix(outcomes, ncol = 2, byrow = TRUE) #Conversion to matrix in case there was only one row in outcomes
+    if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 < 2', check hypotheses")
+    cols <- which(rowSums(is.na(outcomes)) < 2) #which columns contain a numeric value (comparing variable to value), that is not two NA-values
+    specified <- t(outcomes[cols,]) #transpose so that specified comparison values are extracted in correct order below
+    specified <- specified[!is.na(specified)] #extract specified comparison values
+    r_i <- ifelse(rowSums(is.na(outcomes)) == 2, 0, specified) #If variable = variable -> 0, if variable = value -> value
+    r_i <- matrix(r_i, ncol = length(r_i)) #convert to matrix
+    
+    var_locations <- t(apply(less_than[, -2], 1, function(x) ifelse(x %in% varnames, which(varnames %in% x), 0))) #convert non-variables to NA, only worked with rows but gets transposed
+    
+    R_i <- matrix(rep(0, nrow(less_than)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
+    
+    for(i in seq_along(r_i)){ # for each row i in R_i, replace the columns specified in var_locations row i
+      if(!all(var_locations[i, ] > 0)){ #If only one variable is specified (i.e., other one is set to zero)
+        R_i[i, var_locations[i,]] <- 1 #Set this variable to 1 in R_i row i
+      } else{ #If two variables specified
+        R_i[i, var_locations[i,]] <- c(1, -1) #Set one column to 1 and the other to -1 in R_i row i
+      }
+    }
+    
+    leq <- list(R_i = R_i, r_i = r_i) #list with less or equal to
+  }
+  
+  if(is.null(geq) && is.null(leq)){
+    list_inequality <- NULL #If no inequality comparisons, set to null
+  } else{
+    list_inequality <- list(R_i = list(geq = geq$R_i, leq = leq$R_i), r_i = list(geq = geq$r_i, leq = leq$r_i))
+  }
+  
+  matrices <- list(equality = list_equality, inequality = list_inequality) #final output
+  
+  
+  #3)check----------------
+  if(is.null(matrices$inequality)){
+    comparisons <- "only equality"
+  } else if(is.null(matrices$equality)){
+    comparisons <- "only inequality"
+  } else{
+    comparisons <- "both comparisons"
+  }
+  
+  
+  if(comparisons == "only equality"){         
+    #**3.1)only-equality----
+    R_e <- matrices$equality$R_e
+    r_e <- matrices$equality$r_e
+    
+    delta <- R_e %*% betahat #Posterior values we want to check
+    delta_zero <- R_e %*% rep(0, k) #Prior values
+    
+    #Scale matrix components, had to separate them to calculate RX
+    X <- model.matrix(object) #X-values including intercept
+    RX <- R_e %*% solve((t(X) %*% X)) %*% t(R_e) 
+    s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Tried extracting s2 from vcov(object) but made some mistake, this gives correct result
+    
+    #Scale matrix for posterior t-distribution
+    scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_e)) #ncol = number of effects, needs to be in matrix for dmvt
+    
+    #Scale matrix for prior t-distribution
+    scale_star <- matrix(s2 * RX / (n*b - k), nrow(R_e)) #ncol = number of effects, needs to be in matrix for dmvt
+    
+    #Hypothesis test
+    log_BF <- dmvt(x = r_e, delta = delta, sigma = scale_m, df = n - k, log = TRUE) - #using logs and backtransforming is more robust
+      dmvt(x = r_e, delta = delta_zero, sigma = scale_star, df = n*b - k, log = TRUE) 
+    
+    BF <- exp(log_BF) 
+    names(BF) <- paste0("BF for ", hyp) #end 'only equality' option
+    
+  } else if(comparisons == "only inequality"){
+    #**3.2)only-inequality----
+    
+    BFp <- c(1, 1) #outcome variables for below loop
+    BFm <- c(1, 1) #Filled with 1s to ensure that prod(BFm/p) in line 281 works even if only one of'<' or '>' comparisons
+    
+    for(i in 1:2){ #For inequality > and then for inequality <
+      R_i <- matrices$inequality$R_i[[i]]
+      r_i <- as.vector(matrices$inequality$r_i[[i]]) #For pmvt must be a vector contrary to for dmvt.
+      if(is.null(R_i)) next #If comparison type (< or >) was not made skip that loop
+      
+      delta <- as.vector(R_i %*% betahat) #Posterior values we want to check
+      delta_zero <- as.vector(R_i %*% rep(0, k)) #Prior values
+      
+      #Scale matrix components
+      X <- model.matrix(object) #X-values including intercept
+      RX <- as.vector(R_i %*% solve((t(X) %*% X)) %*% t(R_i)) #Needs to be vector for later calculation
+      s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Using this gives correct result
+      
+      #Scale matrix for posterior t-distribution
+      scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_i)) #must be matrix for monte carlo draws
+      
+      #Scale matrix for prior t-distribution
+      scale_star <- matrix(s2 * RX / (n*b - k), ncol = nrow(R_i))
+      
+      if(i == 1){ #If comparison is '>'
+        #Hypothesis test using exact values
+        if(nrow(scale_m) == 1){ #If univariate
+          BF1 <- pt((r_i - delta) / sqrt(scale_m), df = n - k, lower.tail = FALSE)[1] / #posterior
+            pt((r_i - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = FALSE)[1] #prior
+        } else { #if multivariate
+          BF1 <- pmvt(lower = r_i, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
+            pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
+        }
+        
+        #Alternative method using monte carlo draws
+        draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
+        satisfied_post <- apply(draws_post > r_i, 1, prod) #checks which posterior draws satisfy constraints
+        
+        draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
+        satisfied_pre <- apply(draws_pre > r_i, 1, prod) #checks which prior draws satisfy constraints
+        
+      } else{ #for comparison is '<'
+        if(nrow(scale_m) == 1){ #If univariate
+          BF1 <- pt((r_i - delta) / sqrt(scale_m), df = n - k, lower.tail = TRUE)[1] / #posterior
+            pt((r_i - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = TRUE)[1] #prior
+        } else { #if multivariate
+          BF1 <- pmvt(lower = -Inf, upper = r_i, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
+            pmvt(lower = -Inf, upper = r_i, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
+        }
+        
+        #Alternative method using monte carlo draws
+        draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
+        satisfied_post <- apply(draws_post < r_i, 1, prod) #checks which posterior draws satisfy constraints
+        
+        draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
+        satisfied_pre <- apply(draws_pre < r_i, 1, prod) #checks which prior draws satisfy constraints  
+      }
+      
+      BFp[[i]] <- BF1 #pmvt
+      BFm[[i]] <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
+    }
+    
+    BFp <- prod(BFp) #pmvt - combined BF for > and <
+    BFm <- prod(BFm) #monte carlo - combined BF for > and <
+    
+    BF <- matrix(c(BFp, BFm)) 
+    rownames(BF) <- c("pmvt", "monte carlo") 
+    colnames(BF) <- paste0("BF for ", hyp) #end 'only inequality' option
+    
+  } else{ #If 'both comparisons'
+    
+    #**3.3)both-comparisons----
+    R_e <- matrices$equality$R_e
+    r_e <- matrices$equality$r_e
+    
+    #Scale matrix for posterior t-distribution
+    scale_m <- vcov(object) #ncol = number of effects, needs to be in matrix for dmvt
+    
+    #Scale matrix for prior t-distribution
+    scale_star <- vcov(object) * (n - k) / (n*b - k)#ncol = number of effects, needs to be in matrix for dmvt
+    
+    #a)Transformation matrix
+    D <- diag(k) - t(R_e) %*% solve(R_e %*% t(R_e)) %*% R_e 
+    D2 <- unique(D) #Unique, must take unique first or else if only one row treats as vector
+    D2 <- D2[as.logical(rowSums(D2 != 0)),] #Remove if only zeroes, this version keeps also rows where sum (+ -) ends up being zero
+    Tm <- rbind(R_e, D2) #Transformation matrix, T is an object in base already (TRUE) so using Tm
+    
+    #b)
+    w_post <- Tm %*% betahat
+    w_prior <- Tm %*% rep(0, k) 
+    K_post <- Tm %*% scale_m %*% t(Tm) 
+    K_prior <- Tm %*% scale_star %*% t(Tm)
+    
+    #Equality BF 
+    log_BF <- dmvt(x = r_e, delta = w_post[1:nrow(R_e)], sigma = matrix(K_post[1:nrow(R_e), 1:nrow(R_e)], ncol = nrow(R_e)), df = n - k, log = TRUE) - #sigmas must be matrices due to code of dmvt
+      dmvt(x = r_e, delta = w_prior[1:nrow(R_e)], sigma = matrix(K_prior[1:nrow(R_e), 1:nrow(R_e)], ncol = nrow(R_e)), df = n*b - k, log = TRUE)  #using logs and backtransforming is more robust
+    
+    BFe <- exp(log_BF)
+    
+    #Inequality
+    
+    #Partitioning
+    #Makes inequality computations more understandable
+    q_e <- nrow(R_e) #Used a lot in below calculations
+    
+    #Posterior parameters
+    w_1_post <- w_post[1:q_e]
+    w_2_post <- w_post[(q_e + 1):k]
+    
+    K_11_post <- K_post[1:q_e, 1:q_e]
+    K_12_post <- K_post[1:q_e, (q_e + 1):k]
+    K_21_post <- K_post[(q_e + 1):k, 1:q_e]
+    K_22_post <- K_post[(q_e + 1):k, (q_e + 1):k]
+    
+    #prior parameters
+    w_1_prior <- w_prior[1:q_e]
+    w_2_prior <- w_prior[(q_e + 1):k]
+    
+    K_11_prior <- K_prior[1:q_e, 1:q_e]
+    K_12_prior <- K_prior[1:q_e, (q_e + 1):k]
+    K_21_prior <- K_prior[(q_e + 1):k, 1:q_e]
+    K_22_prior <- K_prior[(q_e + 1):k, (q_e + 1):k]
+    
+    #Conditional parameters
+    
+    #posterior
+    w_2g1_post <- w_2_post + K_21_post %*% solve(K_11_post) %*% matrix(r_e - w_1_post) #w_2 given theta1, last part needs to be transposed to function as a vector in matrix calc.
+    
+    K_2g1_post <- as.vector(n - k + (t(matrix(r_e - w_1_post)) %*% solve(K_11_post) %*% matrix(r_e - w_1_post)) / #Scalar needs to be vector for multiplication
+                              (n - k + q_e)) * (K_22_post - K_21_post %*% solve(K_11_post) %*% t(K_21_post)) #K_2 given theta1
+    
+    #prior
+    w_2g1_prior <- w_2_prior + K_21_prior %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior) #w_2 given theta1
+    
+    K_2g1_prior <- as.vector(n*b - k + (t(matrix(r_e - w_1_prior)) %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior)) / #Scalar needs to be vector for multiplication
+                               (n*b - k + q_e)) * (K_22_prior - K_21_prior %*% solve(K_11_prior) %*% t(K_21_prior)) #K_2 given theta1
+    
+    #Draws
+    r_e_matrix <- matrix(rep(r_e,1e6),nrow=1e6) #matrix used for extending draws
+    
+    BFi <- c(1, 1) #Variable for results of below loop over inequality constraints
+    for(i in 1:2){ #For inequality > and then for inequality <
+      
+      R_i <- matrices$inequality$R_i[[i]]
+      r_i <- matrices$inequality$r_i[[i]] #For pmvt must be a vector contrary to for dmvt.
+      if(is.null(R_i)) next #If comparison type (< or >) was not made skip that loop
+      
+      R_i2 <- R_i %*% solve(Tm) #R_i with tilde
+      r_i_matrix <- matrix(rep(r_i,1e6),nrow=1e6) #matrix used for checking inequality constraints
+      
+      if(i == 1){ #for comparison is '>'
+        #posterior
+        draws_post <- rmvt(n = 1e6, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
+        draws_post2 <- cbind(r_e_matrix, draws_post) #combine r_e + draws
+        satisfied_post <- apply(draws_post2 %*% t(R_i2) > r_i_matrix,1,prod) #Check which posterior draws satisfy the inequality constraints
+        
+        #prior
+        draws_prior <- rmvt(n = 1e6, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
+        draws_prior2 <- cbind(r_e_matrix, draws_prior) #combine r_e + draws
+        satisfied_prior <- apply(draws_prior2 %*% t(R_i2) > r_i_matrix, 1, prod) #Check which prior draws satisfy the inequality constraints
+        
+      } else{ #for comparison is '<'
+        #posterior
+        draws_post <- rmvt(n = 1e6, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
+        draws_post2 <- cbind(r_e_matrix, draws_post) #combine r_e + draws
+        satisfied_post <- apply(draws_post2 %*% t(R_i2) < r_i_matrix,1,prod) #Check which posterior draws satisfy the inequality constraints
+        
+        #prior
+        draws_prior <- rmvt(n = 1e6, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
+        draws_prior2 <- cbind(r_e_matrix, draws_prior) #combine r_e + draws
+        satisfied_prior <- apply(draws_prior2 %*% t(R_i2) < r_i_matrix, 1, prod) #Check which prior draws satisfy the inequality constraints
+      }
+      
+      BFi[[i]] <- mean(satisfied_post) / mean(satisfied_prior)
+    }
+    
+    BFi <- prod(BFi) #inequality BF is product of BF for BF for '<' and '>'. If only one of those present then gives that BF * 1
+    
+    #Total BF
+    BF <- BFe * BFi
+    names(BF) <- paste0("BF for ", hyp)
+  } #end 'both comparisons' option
+  
+  BF #Final output
+  
 }
-
-#*************************************
-#Function to test both equality and inequality----
-#*************************************
-test_hyp <- function(object, R_e = NULL, r_e = NULL, R_i = NULL, r_i = NULL){
-
-  ##Function assuming both R_e and R_i are filled in
-  
-  #setup [Is common in all cases]
-  betahat <- object$coefficients # ML estimates for betas
-  varnames <- variable.names(object) #provides the variable names of the object, including intercept
-  
-  k <- length(varnames) #varnames has DV but not intercept, but the length is the same as the number of parameters
-  n <- length(object$fitted.values) # df posterior = n - k
-  b <- (k + 1) / n #df prior = nb - k
-  
-  #Scale matrix for posterior t-distribution
-  scale_m <- vcov(object) #ncol = number of effects, needs to be in matrix for dmvt
-  
-  #Scale matrix for prior t-distribution
-  scale_star <- vcov(object) * (n - k) / (n*b - k)#ncol = number of effects, needs to be in matrix for dmvt
-  
-  #Input formatting
-  R_e <- matrix(R_e, nrow = length(r_e), byrow = TRUE) #should be in the shape of a matrix specifying which coefficients we are testing against what
-  r_e <- matrix(r_e, ncol = length(r_e)) #specifying what values we are testing the coefficients against. NB! ncol(r_e) has to equl nrow(R_e)
-  
-  R_i <- matrix(R_i, nrow = length(r_i), byrow = TRUE) #should be in the shape of a matrix specifying which coefficients we are testing against what
-  r_i <- matrix(r_i, ncol = length(r_i)) #specifying what values we are testing the coefficients against. NB! ncol(r_e) has to equl nrow(R_e)
-  
-  ###New stuff!
-  
-  #a)Transformation matrix
-  D <- diag(k) - t(R_e) %*% solve(R_e %*% t(R_e)) %*% R_e 
-  D2 <- unique(D) #Unique, must take unique first or else if only one row treats as vector
-  D2 <- D2[as.logical(rowSums(D2 != 0)),] #Remove if only zeroes, this version keeps also rows where sum (+ -) ends up being zero
-  Tm <- rbind(R_e, D2) #Transformation matrix, T is an object in base already (TRUE) so using Tm
-
-  
-  #b)
-  w_post <- Tm %*% betahat
-  w_prior <- Tm %*% rep(0, k) 
-  K_post <- Tm %*% scale_m %*% t(Tm) 
-  K_prior <- Tm %*% scale_star %*% t(Tm)
-  
-  #Equality BF - 
-  log_BF <- dmvt(x = r_e, delta = w_post[1:nrow(R_e)], sigma = matrix(K_post[1:nrow(R_e), 1:nrow(R_e)], ncol = nrow(R_e)), df = n - k, log = TRUE) - #sigmas must be matrices due to code of dmvt
-    dmvt(x = r_e, delta = w_prior[1:nrow(R_e)], sigma = matrix(K_prior[1:nrow(R_e), 1:nrow(R_e)], ncol = nrow(R_e)), df = n*b - k, log = TRUE)  #using logs and backtransforming is more robust
-  
-  BF1 <- exp(log_BF)
-
-  #Inequality--------------------------------------------------------
-  R_i2 <- R_i %*% solve(Tm) #R_i with tilde
-  
-  #Partitioning----
-  #Makes inequality computations more understandable
-  q_e <- nrow(R_e) #Used a lot in below calculations
-  
-  #Posterior parameters
-  w_1_post <- w_post[1:q_e]
-  w_2_post <- w_post[(q_e + 1):k]
-  
-  K_11_post <- K_post[1:q_e, 1:q_e]
-  K_12_post <- K_post[1:q_e, (q_e + 1):k]
-  K_21_post <- K_post[(q_e + 1):k, 1:q_e]
-  K_22_post <- K_post[(q_e + 1):k, (q_e + 1):k]
-  
-  #prior parameters
-  w_1_prior <- w_prior[1:q_e]
-  w_2_prior <- w_prior[(q_e + 1):k]
-  
-  K_11_prior <- K_prior[1:q_e, 1:q_e]
-  K_12_prior <- K_prior[1:q_e, (q_e + 1):k]
-  K_21_prior <- K_prior[(q_e + 1):k, 1:q_e]
-  K_22_prior <- K_prior[(q_e + 1):k, (q_e + 1):k]
-
-  
-  #Conditional parameters----
-
-  #posterior
-  w_2g1_post <- w_2_post + K_21_post %*% solve(K_11_post) %*% matrix(r_e - w_1_post) #w_2 given theta1, last part needs to be transposed to function as a vector in matrix calc.
-  
-  K_2g1_post <- as.vector(n - k + (t(matrix(r_e - w_1_post)) %*% solve(K_11_post) %*% matrix(r_e - w_1_post)) / #Scalar needs to be vector for multiplication
-    (n - k + q_e)) * (K_22_post - K_21_post %*% solve(K_11_post) %*% t(K_21_post)) #K_2 given theta1
-
-  #prior
-  w_2g1_prior <- w_2_prior + K_21_prior %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior) #w_2 given theta1
-  
-  K_2g1_prior <- as.vector(n*b - k + (t(matrix(r_e - w_1_prior)) %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior)) / #Scalar needs to be vector for multiplication
-                            (n*b - k + q_e)) * (K_22_prior - K_21_prior %*% solve(K_11_prior) %*% t(K_21_prior)) #K_2 given theta1
-                  
-  #Draws----
-  r_e_matrix <- matrix(rep(r_e,1e6),nrow=1e6) #matrix used for extending draws
-  r_i_matrix <- matrix(rep(r_i,1e6),nrow=1e6) #matrix used for checking inequality constraints
-  
-  #posterior
-  draws_post <- rmvt(n = 1e6, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
-  draws_post2 <- cbind(r_e_matrix, draws_post) #combine r_e + draws
-  satisfied_post <- apply(draws_post2 %*% t(R_i2) > r_i_matrix,1,prod) #Check which posterior draws satisfy the inequality constraints
-  
-  #prior
-  draws_prior <- rmvt(n = 1e6, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
-  draws_prior2 <- cbind(r_e_matrix, draws_prior) #combine r_e + draws
-  satisfied_prior <- apply(draws_prior2 %*% t(R_i2) > r_i_matrix, 1, prod) #Check which prior draws satisfy the inequality constraints
-  
-  #Results----
-
-  #Inequality BF
-  BF2 <- mean(satisfied_post) / mean(satisfied_prior)
-  
-  #Total BF
-  BF <- BF1 * BF2
-  
-  list(BF = BF, BF1 = BF1, BF2 = BF2)
-
-  
-}
+#END----
 
 
-#*************************************
-#Testing functions----
-#*************************************
-d <- sim_reg_data(c(0.2, 0.1))
-q <- lm(y ~ X1 + X2, data = d)
+#***************************************************
+#Testing the function----
+#***************************************************
+d <- sim_reg_data(c(0.2, 0.1, 0.2))
+q <- lm(y ~ X1 + X2 + X3, data = d)
+# object <- q #for testing subsections of the function
 
-test_equality(q, R_e = c(0, 1, -1, 0, 0, 1), r_e = c(0, 0)) #beta1 == beta2 == 0?
-test_inequality(q, R_i = c(0, 0, 1, 0, 1, 0), r_i = c(0, 0)) #beta1 > 0, beta2 > 0?
+hyp <- "X1 > X2 > X3 = 0"
 
-#for troubleshooting if necessary
-object <- q
-R_e <- c(0, 1, 0) 
-r_e <- c(0)
-R_i <- c(0, 1, 0) 
-r_i <- c(0)
+hyp_test(q, hyp)
+
+
 
