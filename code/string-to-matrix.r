@@ -13,7 +13,6 @@ hyp <- "X1 > X2 = X3 > X4 = 2"
 #comparisons are read from left to right in input string
 #Output is a list with restriction matrices for equality and inequality (> or <) comparisons
 
-
 #*************************************
 #Testing purposes- function to simulate regression data----
 #*************************************
@@ -44,7 +43,7 @@ d <- sim_reg_data(c(0.2, 0.1))
 q <- lm(y ~ X1 + X2, data = d)
 object <- q
 
-hyp <- "X1 > X2 = 2 = 2"
+hyp <- "X1 > X2 = 2"
 
 #***************************************************
 #Function string-to-matrices----
@@ -55,26 +54,26 @@ create_matrices <- function(object, hyp){
   varnames <- variable.names(object) #provides the variable names of the linear model object, including intercept
   if(is.null(varnames)) stop("Please input proper linear model object")
  
-  hyp <- gsub(" ", "", hyp) #removes all whitespace
-  if(!grepl("^[0-9a-zA-Z><=]+$", hyp)) stop("Impermissable characters in hypotheses. Only letters, numbers and '> < = ' permitted") #Self-explanatory
-  if(grepl("[><=]{2,}", hyp)) stop("Do not use combined comparison signs e.g., '>=' or '=='")
+  hyp2 <- gsub(" ", "", hyp) #removes all whitespace
+  if(!grepl("^[0-9a-zA-Z><=]+$", hyp2)) stop("Impermissable characters in hypotheses. Only letters, numbers and '> < = ' permitted") #Self-explanatory
+  if(grepl("[><=]{2,}", hyp2)) stop("Do not use combined comparison signs e.g., '>=' or '=='")
   
-  step1 <- unlist(strsplit(hyp, split = "[<>=]")) #split by comparison signs and unlist
+  step1 <- unlist(strsplit(hyp2, split = "[<>=]")) #split by comparison signs and unlist
   input_vars <- step1[grep("[a-zA-Z]+", step1)] #extract subunits that contain at least one letter
-  if(!all(input_vars %in% varnames)) stop("Specified variable(s) not in object, check spelling") #Checks if input variables exist in lm-object
+  if(!all(input_vars %in% varnames)) stop("Hypothesis variable(s) not in object, check spelling") #Checks if input variables exist in lm-object
   
-  pos_comparisons <- unlist(gregexpr("[<>=]", hyp)) #Gives the positions of all comparison signs
+  pos_comparisons <- unlist(gregexpr("[<>=]", hyp2)) #Gives the positions of all comparison signs
   left <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
   right <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
   pos1 <- c(-1, pos_comparisons) #positions to extract data to the left of comparisons
-  pos2 <- c(pos_comparisons, nchar(hyp) + 1) #positions to extract data to the right of comparisons
+  pos2 <- c(pos_comparisons, nchar(hyp2) + 1) #positions to extract data to the right of comparisons
   for(i in seq_along(pos1)){
-    left[i] <- substring(hyp, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the left of a comparison sign
-    right[i] <- substring(hyp, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the right of a comparison sign
+    left[i] <- substring(hyp2, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the left of a comparison sign
+    right[i] <- substring(hyp2, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the right of a comparison sign
     }
   left <- left[-length(left)] #remove last element which is a NA due to loop formatting
   right <- right[-length(right)] #remove last element which is a NA due to loop formatting
-  comparisons <- substring(hyp, pos_comparisons, pos_comparisons) #Extract comparison signs
+  comparisons <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
   framed <- data.frame(left = left, comp = comparisons, right = right, stringsAsFactors = FALSE) #hypotheses as a dataframe
   
   equality <- framed[framed$comp == "=",]
@@ -171,10 +170,10 @@ create_matrices <- function(object, hyp){
   if(is.null(geq) && is.null(leq)){
     list_inequality <- NULL #If no inequality comparisons, set to null
   } else{
-    list_inequality <- list(geq = geq, leq = leq)
+    list_inequality <- list(R_i = list(geq = geq$R_i, leq = leq$R_i), r_i = list(geq = geq$r_i, leq = leq$r_i)) #Order list by R_i and r_i
   }
   
   matrices <- list(equality = list_equality, inequality = list_inequality) #final output
   
 }
- 
+
