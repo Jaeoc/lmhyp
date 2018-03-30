@@ -2,6 +2,13 @@
 #Script purpose: Function to examine complex hypothesis for lm objects with a reasonable prior and BF as output
 #Code: Anton Ohlsson Collentine
 
+
+#Content----
+#a) Function to simulate regression data
+#b) hypothesis testing function
+#c) code for trying out b)
+
+
 #*************************************
 #Function to simulate regression data----
 #*************************************
@@ -36,6 +43,9 @@ sim_reg_data <- function(betas, intercept = 0,  sigma2 = 1, n = 100){
 #Requires mvtnorm
 if(!require("mvtnorm")){install.packages("mvtnorm")}
 library(mvtnorm)
+#reqires Matrix for function 'rankMatrix' for choice between pmvt and montecarlo in only inequality option 
+if(!require("Matrix")){install.packages("Matrix")}
+library(Matrix)
 
 #Parts of function
 #1) Initial setup and checks, [gives warning if improper lm object input]
@@ -228,8 +238,7 @@ hyp_test <- function(object, hyp){
     } else if(comparisons == "only inequality"){
       #**3.2)only-inequality----
       
-      BFp <- c(1, 1) #outcome variables for below loop
-      BFm <- c(1, 1) #Filled with 1s to ensure that prod(BFm/p) in line 281 works even if only one of'<' or '>' comparisons
+      BFi <- c(1, 1) #Filled with 1s to ensure that prod(BFm/p) in line 281 works even if only one of'<' or '>' comparisons
       
       for(i in 1:2){ #For inequality > and then for inequality <
         R_i <- matrices$inequality$R_i[[i]]
@@ -251,6 +260,7 @@ hyp_test <- function(object, hyp){
         scale_star <- matrix(s2 * RX / (n*b - k), ncol = nrow(R_i))
         
         if(i == 1){ #If comparison is '>'
+          if(rankMatrix(R_i)[[1]] == nrow(R_i)){ #If matrix rank is equal to number of rows do exact test
           #Hypothesis test using exact values
           if(nrow(scale_m) == 1){ #If univariate
             BF1 <- pt((r_i - delta) / sqrt(scale_m), df = n - k, lower.tail = FALSE)[1] / #posterior
@@ -260,14 +270,18 @@ hyp_test <- function(object, hyp){
               pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
           }
           
-          #Alternative method using monte carlo draws
+          } else{#Alternative method using monte carlo draws if matrix rank not equal to numer of rows
           draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
           satisfied_post <- apply(draws_post > r_i, 1, prod) #checks which posterior draws satisfy constraints
           
           draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
           satisfied_pre <- apply(draws_pre > r_i, 1, prod) #checks which prior draws satisfy constraints
           
+          BF1 <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
+          }
+          
         } else{ #for comparison is '<'
+          if(rankMatrix(R_i)[[1]] == nrow(R_i)){ #If matrix rank is equal to number of rows do exact test
           if(nrow(scale_m) == 1){ #If univariate
             BF1 <- pt((r_i - delta) / sqrt(scale_m), df = n - k, lower.tail = TRUE)[1] / #posterior
               pt((r_i - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = TRUE)[1] #prior
@@ -275,25 +289,21 @@ hyp_test <- function(object, hyp){
             BF1 <- pmvt(lower = -Inf, upper = r_i, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
               pmvt(lower = -Inf, upper = r_i, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
           }
-          
-          #Alternative method using monte carlo draws
+          } else{#Alternative method using monte carlo draws if matrix rank not equal to number of rows
           draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
           satisfied_post <- apply(draws_post < r_i, 1, prod) #checks which posterior draws satisfy constraints
           
           draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
           satisfied_pre <- apply(draws_pre < r_i, 1, prod) #checks which prior draws satisfy constraints  
+          
+          BF1 <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
+          }
         }
         
-        BFp[[i]] <- BF1 #pmvt
-        BFm[[i]] <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
+        BFi[[i]] <- BF1 #pmvt
       }
       
-      BFp <- prod(BFp) #pmvt - combined BF for > and <
-      BFm <- prod(BFm) #monte carlo - combined BF for > and <
-      
-      BF <- matrix(c(BFp, BFm)) 
-      rownames(BF) <- c("pmvt", "monte carlo") 
-      colnames(BF) <- "BF" #end 'only inequality' option
+      BF <- prod(BFi) #combined BF for > and <
       
     } else{ #If 'both comparisons'
       
@@ -416,17 +426,17 @@ hyp_test <- function(object, hyp){
   out #final output is a list with all specified hypotheses
   
 }
-#END----
+#End----
 
 
 #***************************************************
 #Testing the function----
 #***************************************************
-d <- sim_reg_data(c(0.2, 0.1))
-q <- lm(y ~ X1 + X2, data = d)
+d <- sim_reg_data(c(0.2, 0.1, 0))
+q <- lm(y ~ X1 + X2 + X3, data = d)
 # object <- q #for testing subsections of the function
 
-hyp <- "X1 < X2 = 0"
+hyp <- "X1 > X2 = 0"
 
 hyp_test(q, hyp)
 
