@@ -2,6 +2,7 @@
 #Script purpose: Function to examine complex hypothesis for lm objects with a reasonable prior and BF as output
 #Code: Anton Ohlsson Collentine
 
+##TO DO: Check if 'both comparisons' exact part for inequality seems to be working
 
 #Content----
 #a) Function to simulate regression data
@@ -80,7 +81,8 @@ hyp_test <- function(object, hyp){
   
   hyp <- unlist(strsplit(hyp, split = ",")) #Vector for returning specified hypotheses with outcome
   hyps <- unlist(strsplit(hyp2, split = ",")) #Separated hypotheses (if several hypotheses) for use in computations
-  out <- vector("list", length = length(hyps)) #list for final output of each hypothesis
+  out <- vector("list", length = length(hyps) + 1) #list for final output of each hypothesis
+  out[[length(out)]] <- 1 #First value for computing overall BF at end (in case of several hypotheses)
   
   for(h in seq_along(hyps)){ #loops over the rest of the function until penultimate }
     hyp2 <- hyps[[h]] #for each hypothesis, go through the rest of the function
@@ -103,7 +105,7 @@ hyp_test <- function(object, hyp){
     equality <- framed[framed$comp == "=",]
     inequality <- framed[!framed$comp == "=",]
     
-    #Equality part string-to-matrix
+    #****Equality part string-to-matrix
     if(nrow(equality) == 0) { #If there are no '=' comparisons set to NULL
       list_equality <- NULL
     } else{
@@ -131,7 +133,7 @@ hyp_test <- function(object, hyp){
     }
     
     
-    #Inequality part string-to-matrix
+    #****Inequality part string-to-matrix
   if(nrow(inequality) == 0) { #If there are no '>' or '<' comparisons set to NULL
     list_inequality <- NULL 
     } else{
@@ -213,7 +215,7 @@ hyp_test <- function(object, hyp){
         #Scale matrix components
         X <- model.matrix(object) #X-values including intercept
         RX <- as.vector(R_i %*% solve((t(X) %*% X)) %*% t(R_i)) #Needs to be vector for later calculation
-        s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #Using this gives correct result
+        s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #sums of squares
         
         #Scale matrix for posterior t-distribution
         scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_i)) #must be matrix for monte carlo draws
@@ -243,6 +245,8 @@ hyp_test <- function(object, hyp){
     } else{ #If 'both comparisons'
       
       #**3.3)both-comparisons----
+      
+      #****Equality
       R_e <- matrices$equality$R_e
       r_e <- matrices$equality$r_e
       
@@ -270,94 +274,108 @@ hyp_test <- function(object, hyp){
       
       BFe <- exp(log_BF)
       
-      #Inequality
+      #****Inequality
+      R_i <- matrices$inequality$R_i
+      r_i <- matrices$inequality$r_i 
       
-      #Partitioning
-      #Makes inequality computations more understandable
       q_e <- nrow(R_e) #Used a lot in below calculations
+      R_it <- R_i %*% solve(Tm) #R_i tilde
       
-      #Posterior parameters
-      w_1_post <- w_post[1:q_e]
-      w_2_post <- w_post[(q_e + 1):k]
+      columns <- c(rep(1, q_e), rep(0, k - q_e)) #for indicating conditional columns 
+      R_iv <- R_it[, columns == 0] #Select columns indicated by dummy
+      R_iv <- matrix(R_iv, ncol = length(R_iv)) #convert to matrix, if only one row otherwise becomes vector
       
-      K_11_post <- K_post[1:q_e, 1:q_e]
-      K_12_post <- K_post[1:q_e, (q_e + 1):k]
-      K_21_post <- K_post[(q_e + 1):k, 1:q_e]
-      K_22_post <- K_post[(q_e + 1):k, (q_e + 1):k]
+      if(rankMatrix(R_iv)[[1]] == nrow(R_iv)){ #If matrix rank is equal to number of rows do exact test
+        r_iv <- as.vector(r_i - R_it[, columns] %*% r_e) #For pmvt must be a vector contrary to for dmvt.
+
+        delta <- as.vector(R_iv %*% betahat) #Posterior values we want to check
+        delta_zero <- as.vector(R_iv %*% rep(0, k)) #Prior values
+        
+        #Scale matrix components
+        X <- model.matrix(object) #X-values including intercept
+        RX <- as.vector(R_iv %*% solve((t(X) %*% X)) %*% t(R_iv)) #Needs to be vector for later calculation
+        s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #sums of squares
+        
+        #Scale matrix for posterior t-distribution
+        scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_iv)) #must be matrix for monte carlo draws
+        
+        #Scale matrix for prior t-distribution
+        scale_star <- matrix(s2 * RX / (n*b - k), ncol = nrow(R_iv))
+
+        if(nrow(scale_m) == 1){ #If univariate
+          BFi <- pt((r_iv - delta) / sqrt(scale_m), df = n - k, lower.tail = FALSE)[1] / #posterior
+            pt((r_iv - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = FALSE)[1] #prior
+          } else { #if multivariate
+            BFi <- pmvt(lower = r_iv, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
+              pmvt(lower = r_iv, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
+            }
+        
+        } else{ #If rank smaller than number of rows, do monte carlo draws
+
+          #Partitioning (everything below only needed for draws)
+          #Makes inequality computations more understandable
+          #Posterior parameters
+          w_1_post <- w_post[1:q_e]
+          w_2_post <- w_post[(q_e + 1):k]
       
-      #prior parameters
-      w_1_prior <- w_prior[1:q_e]
-      w_2_prior <- w_prior[(q_e + 1):k]
+          K_11_post <- K_post[1:q_e, 1:q_e]
+          K_12_post <- K_post[1:q_e, (q_e + 1):k]
+          K_21_post <- K_post[(q_e + 1):k, 1:q_e]
+          K_22_post <- K_post[(q_e + 1):k, (q_e + 1):k]
       
-      K_11_prior <- K_prior[1:q_e, 1:q_e]
-      K_12_prior <- K_prior[1:q_e, (q_e + 1):k]
-      K_21_prior <- K_prior[(q_e + 1):k, 1:q_e]
-      K_22_prior <- K_prior[(q_e + 1):k, (q_e + 1):k]
+          #prior parameters
+          w_1_prior <- w_prior[1:q_e]
+          w_2_prior <- w_prior[(q_e + 1):k]
       
-      #Conditional parameters
+          K_11_prior <- K_prior[1:q_e, 1:q_e]
+          K_12_prior <- K_prior[1:q_e, (q_e + 1):k]
+          K_21_prior <- K_prior[(q_e + 1):k, 1:q_e]
+          K_22_prior <- K_prior[(q_e + 1):k, (q_e + 1):k]
       
-      #posterior
-      w_2g1_post <- w_2_post + K_21_post %*% solve(K_11_post) %*% matrix(r_e - w_1_post) #w_2 given theta1, last part needs to be transposed to function as a vector in matrix calc.
+          #Conditional parameters
       
-      K_2g1_post <- as.vector(n - k + (t(matrix(r_e - w_1_post)) %*% solve(K_11_post) %*% matrix(r_e - w_1_post)) / #Scalar needs to be vector for multiplication
-                                (n - k + q_e)) * (K_22_post - K_21_post %*% solve(K_11_post) %*% t(K_21_post)) #K_2 given theta1
+          #posterior
+          w_2g1_post <- w_2_post + K_21_post %*% solve(K_11_post) %*% matrix(r_e - w_1_post) #w_2 given theta1, last part needs to be transposed to function as a vector in matrix calc.
       
-      #prior
-      w_2g1_prior <- w_2_prior + K_21_prior %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior) #w_2 given theta1
+          K_2g1_post <- as.vector(n - k + (t(matrix(r_e - w_1_post)) %*% solve(K_11_post) %*% matrix(r_e - w_1_post)) / #Scalar needs to be vector for multiplication
+                                    (n - k + q_e)) * (K_22_post - K_21_post %*% solve(K_11_post) %*% t(K_21_post)) #K_2 given theta1
       
-      K_2g1_prior <- as.vector(n*b - k + (t(matrix(r_e - w_1_prior)) %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior)) / #Scalar needs to be vector for multiplication
+          #prior
+          w_2g1_prior <- w_2_prior + K_21_prior %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior) #w_2 given theta1
+      
+          K_2g1_prior <- as.vector(n*b - k + (t(matrix(r_e - w_1_prior)) %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior)) / #Scalar needs to be vector for multiplication
                                  (n*b - k + q_e)) * (K_22_prior - K_21_prior %*% solve(K_11_prior) %*% t(K_21_prior)) #K_2 given theta1
       
-      #Draws
-      r_e_matrix <- matrix(rep(r_e,1e6),nrow=1e6) #matrix used for extending draws
-      
-      BFi <- c(1, 1) #Variable for results of below loop over inequality constraints
-      for(i in 1:2){ #For inequality > and then for inequality <
+          #Draws
+          r_e_matrix <- matrix(rep(r_e,1e6),nrow=1e6) #matrix used for extending draws
+          r_i_matrix <- matrix(rep(r_i,1e6),nrow=1e6) #matrix used for checking inequality constraints
         
-        R_i <- matrices$inequality$R_i[[i]]
-        r_i <- matrices$inequality$r_i[[i]] #For pmvt must be a vector contrary to for dmvt.
-        if(is.null(R_i)) next #If comparison type (< or >) was not made skip that loop
-        
-        R_i2 <- R_i %*% solve(Tm) #R_i with tilde
-        r_i_matrix <- matrix(rep(r_i,1e6),nrow=1e6) #matrix used for checking inequality constraints
-        
-        if(i == 1){ #for comparison is '>'
           #posterior
           draws_post <- rmvt(n = 1e6, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
           draws_post2 <- cbind(r_e_matrix, draws_post) #combine r_e + draws
-          satisfied_post <- apply(draws_post2 %*% t(R_i2) > r_i_matrix,1,prod) #Check which posterior draws satisfy the inequality constraints
+          satisfied_post <- apply(draws_post2 %*% t(R_it) > r_i_matrix,1,prod) #Check which posterior draws satisfy the inequality constraints
           
           #prior
           draws_prior <- rmvt(n = 1e6, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
           draws_prior2 <- cbind(r_e_matrix, draws_prior) #combine r_e + draws
-          satisfied_prior <- apply(draws_prior2 %*% t(R_i2) > r_i_matrix, 1, prod) #Check which prior draws satisfy the inequality constraints
-          
-        } else{ #for comparison is '<'
-          #posterior
-          draws_post <- rmvt(n = 1e6, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
-          draws_post2 <- cbind(r_e_matrix, draws_post) #combine r_e + draws
-          satisfied_post <- apply(draws_post2 %*% t(R_i2) < r_i_matrix,1,prod) #Check which posterior draws satisfy the inequality constraints
-          
-          #prior
-          draws_prior <- rmvt(n = 1e6, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
-          draws_prior2 <- cbind(r_e_matrix, draws_prior) #combine r_e + draws
-          satisfied_prior <- apply(draws_prior2 %*% t(R_i2) < r_i_matrix, 1, prod) #Check which prior draws satisfy the inequality constraints
-        }
+          satisfied_prior <- apply(draws_prior2 %*% t(R_it) > r_i_matrix, 1, prod) #Check which prior draws satisfy the inequality constraints
         
-        BFi[[i]] <- mean(satisfied_post) / mean(satisfied_prior)
-      }
-      
-      BFi <- prod(BFi) #inequality BF is product of BF for BF for '<' and '>'. If only one of those present then gives that BF * 1
+          BFi <- mean(satisfied_post) / mean(satisfied_prior)
+          
+        } #End inequality part
       
       #Total BF
       BF <- BFe * BFi
-    } #end 'both comparisons' option
+      
+      } #end 'both comparisons' option
     
     out[[h]] <- BF #Output for each specified hypothesis
     names(out)[[h]] <- paste0("BF for ", hyp[[h]]) #name list with hypothesis as originally specified
+    out[[length(out)]] <- out[[length(out)]] * BF #combined BF for all hypotheses
     
   }
   
+  names(out[[length(out)]]) <- "Overall Bayes Factor for all hypotheses combined"
   out #final output is a list with all specified hypotheses
   
 }
@@ -367,13 +385,13 @@ hyp_test <- function(object, hyp){
 #***************************************************
 #Testing the function----
 #***************************************************
-d <- sim_reg_data(c(0.2, 0.1, 0))
-q <- lm(y ~ X1 + X2 + X3, data = d)
-# object <- q #for testing subsections of the function
+d <- sim_reg_data(c(0.2, 0.1))
+q <- lm(y ~ X1 + X2, data = d)
+object <- q #for testing subsections of the function
 
-hyp <- "X1 > X2 = 0"
+hyp <- "X1 = X2 > 0"
 
 hyp_test(q, hyp)
-
+create_matrices(q, hyp)
 
 
