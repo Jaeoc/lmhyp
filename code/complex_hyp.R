@@ -132,14 +132,10 @@ hyp_test <- function(object, hyp){
     
     
     #Inequality part string-to-matrix
-    greater_than <- inequality[inequality$comp == ">",] #Separate between greater than 
-    less_than <- inequality[inequality$comp == "<",] #and less than comparisons
-    
-    #For greater_than
-    if(nrow(greater_than) == 0) { #If there are no '>' comparisons set to NULL
-      geq <- NULL #outcome of loop
+  if(nrow(inequality) == 0) { #If there are no '>' or '<' comparisons set to NULL
+    list_inequality <- NULL 
     } else{
-      outcomes <- suppressWarnings(apply(greater_than[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
+      outcomes <- suppressWarnings(apply(inequality[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
       outcomes <- matrix(outcomes, ncol = 2, byrow = TRUE) #Conversion to matrix in case there was only one row in outcomes
       if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 > 2', check hypotheses")
       cols <- which(rowSums(is.na(outcomes)) < 2) #which columns contain a numeric value (comparing variable to value), that is not two NA-values
@@ -147,55 +143,25 @@ hyp_test <- function(object, hyp){
       specified <- specified[!is.na(specified)] #extract specified comparison values
       r_i <- ifelse(rowSums(is.na(outcomes)) == 2, 0, specified) #If variable = variable -> 0, if variable = value -> value
       r_i <- matrix(r_i, ncol = length(r_i)) #convert to matrix
-      
-      var_locations <- t(apply(greater_than[, -2], 1, function(x) ifelse(x %in% varnames, which(varnames %in% x), 0))) #convert non-variables to NA, only worked with rows but gets transposed
-      
-      R_i <- matrix(rep(0, nrow(greater_than)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
-      
+  
+      leq <- which(inequality$comp == "<") #gives the rows that contain '<' comparisons
+      var_locations <- t(apply(inequality[, -2], 1, function(x) ifelse(x %in% varnames, which(varnames %in% x), 0))) #convert non-variables to NA, only worked with rows but gets transposed
+      R_i <- matrix(rep(0, nrow(inequality)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
+  
       for(i in seq_along(r_i)){ # for each row i in R_i, replace the columns specified in var_locations row i
         if(!all(var_locations[i, ] > 0)){ #If only one variable is specified (i.e., other one is set to zero)
-          R_i[i, var_locations[i,]] <- 1 #Set this variable to 1 in R_i row i
-        } else{ #If two variables specified
-          R_i[i, var_locations[i,]] <- c(1, -1) #Set one column to 1 and the other to -1 in R_i row i
+          
+          value <- if(i %in% leq) -1 else 1 #If comparison is 'lesser or equal' set to -1, if 'larger or equal' set to 1
+          R_i[i, var_locations[i,]] <- value #Set this variable to 1 in R_i row i
+          
+          } else{ #If two variables specified
+            value <- if(i %in% leq) c(-1, 1) else c(1, -1) #If comparison is 'leq' take var2 - var1, if 'larger or equal' take var1 - var2
+            R_i[i, var_locations[i,]] <- value #Set one column to 1 and the other to -1 in R_i row i
+          }
         }
+  
+      list_inequality<- list(R_i = R_i, r_i = r_i) #Note column 1 in R_i is for intercept
       }
-      
-      geq <- list(R_i = R_i, r_i = r_i) #list with greater or equal
-    }
-    
-    #For less_than
-    if(nrow(less_than) == 0) { #If there are no '<' comparisons set to NULL
-      leq <- NULL #outcome of loop
-    } else{
-      outcomes <- suppressWarnings(apply(less_than[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
-      outcomes <- matrix(outcomes, ncol = 2, byrow = TRUE) #Conversion to matrix in case there was only one row in outcomes
-      if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 < 2', check hypotheses")
-      cols <- which(rowSums(is.na(outcomes)) < 2) #which columns contain a numeric value (comparing variable to value), that is not two NA-values
-      specified <- t(outcomes[cols,]) #transpose so that specified comparison values are extracted in correct order below
-      specified <- specified[!is.na(specified)] #extract specified comparison values
-      r_i <- ifelse(rowSums(is.na(outcomes)) == 2, 0, specified) #If variable = variable -> 0, if variable = value -> value
-      r_i <- matrix(r_i, ncol = length(r_i)) #convert to matrix
-      
-      var_locations <- t(apply(less_than[, -2], 1, function(x) ifelse(x %in% varnames, which(varnames %in% x), 0))) #convert non-variables to NA, only worked with rows but gets transposed
-      
-      R_i <- matrix(rep(0, nrow(less_than)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
-      
-      for(i in seq_along(r_i)){ # for each row i in R_i, replace the columns specified in var_locations row i
-        if(!all(var_locations[i, ] > 0)){ #If only one variable is specified (i.e., other one is set to zero)
-          R_i[i, var_locations[i,]] <- 1 #Set this variable to 1 in R_i row i
-        } else{ #If two variables specified
-          R_i[i, var_locations[i,]] <- c(1, -1) #Set one column to 1 and the other to -1 in R_i row i
-        }
-      }
-      
-      leq <- list(R_i = R_i, r_i = r_i) #list with less or equal to
-    }
-    
-    if(is.null(geq) && is.null(leq)){
-      list_inequality <- NULL #If no inequality comparisons, set to null
-    } else{
-      list_inequality <- list(R_i = list(geq = geq$R_i, leq = leq$R_i), r_i = list(geq = geq$r_i, leq = leq$r_i))
-    }
     
     matrices <- list(equality = list_equality, inequality = list_inequality) #List with matrices of input hypothesis
     
@@ -238,13 +204,9 @@ hyp_test <- function(object, hyp){
     } else if(comparisons == "only inequality"){
       #**3.2)only-inequality----
       
-      BFi <- c(1, 1) #Filled with 1s to ensure that prod(BFm/p) in line 281 works even if only one of'<' or '>' comparisons
-      
-      for(i in 1:2){ #For inequality > and then for inequality <
-        R_i <- matrices$inequality$R_i[[i]]
-        r_i <- as.vector(matrices$inequality$r_i[[i]]) #For pmvt must be a vector contrary to for dmvt.
-        if(is.null(R_i)) next #If comparison type (< or >) was not made skip that loop
-        
+        R_i <- matrices$inequality$R_i
+        r_i <- as.vector(matrices$inequality$r_i) #For pmvt must be a vector contrary to for dmvt.
+
         delta <- as.vector(R_i %*% betahat) #Posterior values we want to check
         delta_zero <- as.vector(R_i %*% rep(0, k)) #Prior values
         
@@ -259,16 +221,14 @@ hyp_test <- function(object, hyp){
         #Scale matrix for prior t-distribution
         scale_star <- matrix(s2 * RX / (n*b - k), ncol = nrow(R_i))
         
-        if(i == 1){ #If comparison is '>'
           if(rankMatrix(R_i)[[1]] == nrow(R_i)){ #If matrix rank is equal to number of rows do exact test
-          #Hypothesis test using exact values
-          if(nrow(scale_m) == 1){ #If univariate
-            BF1 <- pt((r_i - delta) / sqrt(scale_m), df = n - k, lower.tail = FALSE)[1] / #posterior
-              pt((r_i - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = FALSE)[1] #prior
-          } else { #if multivariate
-            BF1 <- pmvt(lower = r_i, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
-              pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
-          }
+            if(nrow(scale_m) == 1){ #If univariate
+              BF <- pt((r_i - delta) / sqrt(scale_m), df = n - k, lower.tail = FALSE)[1] / #posterior
+                pt((r_i - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = FALSE)[1] #prior
+            } else { #if multivariate
+              BF <- pmvt(lower = r_i, upper = Inf, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
+                pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
+            }
           
           } else{#Alternative method using monte carlo draws if matrix rank not equal to numer of rows
           draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
@@ -277,33 +237,8 @@ hyp_test <- function(object, hyp){
           draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
           satisfied_pre <- apply(draws_pre > r_i, 1, prod) #checks which prior draws satisfy constraints
           
-          BF1 <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
+          BF <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
           }
-          
-        } else{ #for comparison is '<'
-          if(rankMatrix(R_i)[[1]] == nrow(R_i)){ #If matrix rank is equal to number of rows do exact test
-          if(nrow(scale_m) == 1){ #If univariate
-            BF1 <- pt((r_i - delta) / sqrt(scale_m), df = n - k, lower.tail = TRUE)[1] / #posterior
-              pt((r_i - delta_zero) / sqrt(scale_star), df = n*b - k, lower.tail = TRUE)[1] #prior
-          } else { #if multivariate
-            BF1 <- pmvt(lower = -Inf, upper = r_i, delta = delta, sigma = scale_m, df = n - k, type = "shifted")[1] / #posterior
-              pmvt(lower = -Inf, upper = r_i, delta = delta_zero, sigma = scale_star, df = n*b - k, type = "shifted")[1] #prior
-          }
-          } else{#Alternative method using monte carlo draws if matrix rank not equal to number of rows
-          draws_post <- rmvt(n = 1e6, delta = delta, sigma = scale_m, df = n - k) #posterior draws
-          satisfied_post <- apply(draws_post < r_i, 1, prod) #checks which posterior draws satisfy constraints
-          
-          draws_pre <- rmvt(n = 1e6, delta = delta_zero, sigma = scale_star, df = n*b - k) #prior draws
-          satisfied_pre <- apply(draws_pre < r_i, 1, prod) #checks which prior draws satisfy constraints  
-          
-          BF1 <- mean(satisfied_post) / mean(satisfied_pre) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
-          }
-        }
-        
-        BFi[[i]] <- BF1 #pmvt
-      }
-      
-      BF <- prod(BFi) #combined BF for > and <
       
     } else{ #If 'both comparisons'
       
