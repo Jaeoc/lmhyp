@@ -2,8 +2,6 @@
 #Script purpose: Function to examine complex hypothesis for lm objects with a reasonable prior and BF as output
 #Code: Anton Ohlsson Collentine
 
-##TO DO: Check if 'both comparisons' exact part for inequality seems to be working
-
 #Content----
 #a) Function to simulate regression data
 #b) hypothesis testing function
@@ -57,7 +55,7 @@ library(Matrix)
 #**3.3) both
 #END
 
-#Note: If several hypotheses specified in input (separated by commas) function loops over parts 2-3 for each hypothesis
+#Note: If several hypotheses specified in input (separated by semicolons) function loops over parts 2-3 for each hypothesis
 
 
 hyp_test <- function(object, hyp){
@@ -71,17 +69,17 @@ hyp_test <- function(object, hyp){
   n <- length(object$fitted.values) # df posterior = n - k
   b <- (k + 1) / n #df prior = nb - k
   
-  hyp2 <- gsub(" ", "", hyp) #removes all whitespace
-  if(!grepl("^[0-9a-zA-Z><=,]+$", hyp2)) stop("Impermissable characters in hypotheses. Only letters, numbers and '> < = ' permitted") #ADDED COMMA Self-explanatory
+  hyp2 <- gsub("[ ()]", "", hyp) #removes all whitespace and parentheses
+  if(!grepl("^[0-9a-zA-Z><=,;]+$", hyp2)) stop("Impermissable characters in hypotheses. Letters, numbers and > < = (),; permitted") #Self-explanatory
   if(grepl("[><=]{2,}", hyp2)) stop("Do not use combined comparison signs e.g., '>=' or '=='")
   
-  step1 <- unlist(strsplit(hyp2, split = "[<>=,]")) #ADDED COMMA, split by comparison signs and unlist
+  step1 <- unlist(strsplit(hyp2, split = "[<>=,;]")) #split by comparison signs and unlist
   input_vars <- step1[grep("[a-zA-Z]+", step1)] #extract subunits that contain at least one letter
   if(!all(input_vars %in% varnames)) stop("Hypothesis variable(s) not in object, check spelling") #Checks if input variables exist in lm-object
   
-  hyp <- unlist(strsplit(hyp, split = ",")) #Vector for returning specified hypotheses with outcome
-  hyps <- unlist(strsplit(hyp2, split = ",")) #Separated hypotheses (if several hypotheses) for use in computations
-  out <- vector("list", length = length(hyps) + 1) #list for final output of each hypothesis
+  hyp <- unlist(strsplit(hyp, split = ";")) #For returning specified hypotheses with outcome
+  hyps <- unlist(strsplit(hyp2, split = ";")) #Separated hypotheses (if several hypotheses) for use in computations
+  out <- vector("list", length = length(hyps) + 1) #list for final output of each hypothesis, + 1 for product (overall BF)
   out[[length(out)]] <- 1 #First value for computing overall BF at end (in case of several hypotheses)
   
   for(h in seq_along(hyps)){ #loops over the rest of the function until penultimate }
@@ -89,18 +87,39 @@ hyp_test <- function(object, hyp){
     
     #2)hyp-to-matrices----
     pos_comparisons <- unlist(gregexpr("[<>=]", hyp2)) #Gives the positions of all comparison signs
-    left <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
-    right <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
-    pos1 <- c(-1, pos_comparisons) #positions to extract data to the left of comparisons
-    pos2 <- c(pos_comparisons, nchar(hyp2) + 1) #positions to extract data to the right of comparisons
+    leftside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below NEW Changed name
+    rightside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+    pos1 <- c(-1, pos_comparisons) #positions to extract data to the leftside of comparisons
+    pos2 <- c(pos_comparisons, nchar(hyp2) + 1) #positions to extract data to the rightside of comparisons
     for(i in seq_along(pos1)){
-      left[i] <- substring(hyp2, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the left of a comparison sign
-      right[i] <- substring(hyp2, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the right of a comparison sign
+      leftside[i] <- substring(hyp2, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the leftside of a comparison sign
+      rightside[i] <- substring(hyp2, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the rightside of a comparison sign
     }
-    left <- left[-length(left)] #remove last element which is a NA due to loop formatting
-    right <- right[-length(right)] #remove last element which is a NA due to loop formatting
+    leftside <- leftside[-length(leftside)] #remove last element which is a NA due to loop formatting
+    rightside <- rightside[-length(rightside)] #remove last element which is a NA due to loop formatting
     comparisons <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
-    framed <- data.frame(left = left, comp = comparisons, right = right, stringsAsFactors = FALSE) #hypotheses as a dataframe
+    framed <- data.frame(left = leftside, comp = comparisons, right = rightside, stringsAsFactors = FALSE) #hypotheses as a dataframe
+    
+    commas <- unique(c(grep(",", framed$left), grep(",", framed$right))) #Gives us the unique rows that contain commas (multiple comparisons) from left or right columns
+    if(length(commas) > 0){ #If there are any multiple comparisons e.g., (X1, X2) separate these
+    multiples <- vector("list", length = length(commas)) #Empty vector to store results for each row in loop below
+    for(r in seq_along(commas)){ #for each row containing commas
+      several <- framed[commas,][r, ] #select row r
+      leftvars <- unlist(strsplit(several$left, split = ",")) #separate left hand var
+      rightvars <- unlist(strsplit(several$right, split = ",")) #separate right hand vars
+      if(any(grepl("^$", leftvars)) || any(grepl("^$", rightvars))) stop("Misplaced comma in hypothesis") #if empty element after strsplit
+      
+      left <- rep(leftvars, each = length(rightvars)) #repeat each leftvars the number of rightvars
+      right <- rep(rightvars, each = length(leftvars)) #complement for rightvars
+      comp <- rep(several$comp, length(left)) #repeat the comparison a corresponding number of times
+      
+      multiples[[r]] <- data.frame(left = left, comp = comp, right = right, stringsAsFactors = FALSE) #save as df to be able to combine with 'framed'
+    }
+    
+    framed <- framed[-commas,] #remove old unfixed rows with commas
+    multiples <- do.call(rbind, multiples) #make list into dataframe
+    framed <- rbind(multiples, framed) #recombine into one dataframe
+    }
     
     equality <- framed[framed$comp == "=",]
     inequality <- framed[!framed$comp == "=",]
@@ -119,6 +138,7 @@ hyp_test <- function(object, hyp){
       r_e <- matrix(r_e, ncol = length(r_e)) #convert to matrix
       
       var_locations <- t(apply(equality[, -2], 1, function(x) ifelse(x %in% varnames, which(varnames %in% x), 0))) #convert non-variables to NA, only worked with rows but gets transposed
+      var_locations <- matrix(var_locations, ncol = 2) #Necessary if only one comparison row
       
       R_e <- matrix(rep(0, nrow(equality)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
       
@@ -148,6 +168,8 @@ hyp_test <- function(object, hyp){
   
       leq <- which(inequality$comp == "<") #gives the rows that contain '<' comparisons
       var_locations <- t(apply(inequality[, -2], 1, function(x) ifelse(x %in% varnames, which(varnames %in% x), 0))) #convert non-variables to NA, only worked with rows but gets transposed
+      var_locations <- matrix(var_locations, ncol = 2) #Necessary if only one comparison row
+      
       R_i <- matrix(rep(0, nrow(inequality)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
   
       for(i in seq_along(r_i)){ # for each row i in R_i, replace the columns specified in var_locations row i
@@ -281,20 +303,21 @@ hyp_test <- function(object, hyp){
       q_e <- nrow(R_e) #Used a lot in below calculations
       R_it <- R_i %*% solve(Tm) #R_i tilde
       
-      columns <- c(rep(1, q_e), rep(0, k - q_e)) #for indicating conditional columns 
-      R_iv <- R_it[, columns == 0] #Select columns indicated by dummy
+      columns <- c(rep(1, q_e), rep(0, k - q_e)) #for indicating conditional columns
+      selection <- columns == 0
+      R_iv <- R_it[, selection] #Select columns indicated by dummy
       R_iv <- matrix(R_iv, ncol = length(R_iv)) #convert to matrix, if only one row otherwise becomes vector
       
       if(rankMatrix(R_iv)[[1]] == nrow(R_iv)){ #If matrix rank is equal to number of rows do exact test
         r_iv <- as.vector(r_i - R_it[, columns] %*% r_e) #For pmvt must be a vector contrary to for dmvt.
 
-        delta <- as.vector(R_iv %*% betahat) #Posterior values we want to check
-        delta_zero <- as.vector(R_iv %*% rep(0, k)) #Prior values
+        delta <- as.vector(R_iv %*% betahat[selection]) #Posterior values we want to check 
+        delta_zero <- as.vector(R_iv %*% rep(0, length(columns[selection]))) #Prior values
         
         #Scale matrix components
-        X <- model.matrix(object) #X-values including intercept
+        X <- model.matrix(object)[, -1] #X-values excluding intercept
         RX <- as.vector(R_iv %*% solve((t(X) %*% X)) %*% t(R_iv)) #Needs to be vector for later calculation
-        s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #sums of squares
+        s2 <- sum((model.frame(object)$y - X %*% betahat[selection])^2) #sums of squares
         
         #Scale matrix for posterior t-distribution
         scale_m <- matrix(s2 * RX / (n - k), ncol = nrow(R_iv)) #must be matrix for monte carlo draws
@@ -370,12 +393,12 @@ hyp_test <- function(object, hyp){
       } #end 'both comparisons' option
     
     out[[h]] <- BF #Output for each specified hypothesis
-    names(out)[[h]] <- paste0("BF for ", hyp[[h]]) #name list with hypothesis as originally specified
+    names(out)[[h]] <- paste0("Bayes Factor for '", hyp[[h]], "' vs. not '", hyp[[h]], "'") #name list with hypothesis as originally specified
     out[[length(out)]] <- out[[length(out)]] * BF #combined BF for all hypotheses
     
   }
   
-  names(out[[length(out)]]) <- "Overall Bayes Factor for all hypotheses combined"
+  names(out)[[length(out)]] <- "Overall Bayes Factor for all hypotheses (if several)"
   out #final output is a list with all specified hypotheses
   
 }
@@ -385,13 +408,12 @@ hyp_test <- function(object, hyp){
 #***************************************************
 #Testing the function----
 #***************************************************
-d <- sim_reg_data(c(0.2, 0.1))
-q <- lm(y ~ X1 + X2, data = d)
+d <- sim_reg_data(c(0.2, 0.1, 0, 0.2, 1, 0.8))
+q <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6, data = d)
 object <- q #for testing subsections of the function
 
-hyp <- "X1 = X2 > 0"
+hyp <- "X1 = X4 < X5; X3 = 0"
 
 hyp_test(q, hyp)
-create_matrices(q, hyp)
 
 
