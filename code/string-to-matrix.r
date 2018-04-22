@@ -142,7 +142,8 @@ create_matrices <- function(object, hyp){
             
           several <- c(several$left, several$right)
           separate <- unlist(strsplit(several, split = ",")) #split by special characters and unlist
-          hyp2 <- paste(separate, collapse = "=")
+          if(any(grepl("^$", several))) stop("Misplaced comma in hypothesis") #if empty element
+          hyp2 <- paste(separate, collapse = "=") #convert to X1 = X2 = X3 shape
           
           pos_comparisons <- unlist(gregexpr("=", hyp2)) #Gives the positions of all comparison signs
           leftside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
@@ -161,6 +162,7 @@ create_matrices <- function(object, hyp){
           } else{ #If inequality comparison
           leftvars <- unlist(strsplit(several$left, split = ",")) #separate left hand var
           rightvars <- unlist(strsplit(several$right, split = ",")) #separate right hand vars
+          if(any(grepl("^$", leftvars)) || any(grepl("^$", rightvars))) stop("Misplaced comma in hypothesis") #if empty element
 
           left <- rep(leftvars, length.out = length(rightvars)*length(leftvars)) #repeat each leftvars the number of rightvars
           right <- rep(rightvars, each = length(leftvars)) #complement for rightvars
