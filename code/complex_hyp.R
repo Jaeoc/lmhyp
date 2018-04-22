@@ -63,7 +63,7 @@ library(MASS)
 
 #Note: If several hypotheses specified in input (separated by semicolons) function loops over parts 2-3 for each hypothesis
 
-hyp_test <- function(object, hyp){
+hyp_test <- function(object, hyp, mcrep = 1e6){
   
   #1) initial setup and checks of input----
   varnames <- variable.names(object) #provides the variable names of the object, including intercept
@@ -297,18 +297,19 @@ hyp_test <- function(object, hyp){
             }
           
           } else{#No transformation is possible. Alternative method using monte carlo draws if matrix rank not equal to numer of rows
-          	
-        	#Scale matrix for posterior t-distribution.
+          	if(!is.numeric(mcrep) || !mcrep %% 1 == 0) stop("Input for mcrep should be an integer")
+            reps <- mcrep
+        	  #Scale matrix for posterior t-distribution.
         	scale_post <- vcov(object)
         
         	#Scale matrix for prior t-distribution
         	scale_prior <- vcov(object) * (n - k) / (n*b - k)
         	          	
-          	draws_post <- rmvt(n = 1e6, delta = betahat, sigma = scale_post, df = n - k) #posterior draws NEW: deltas are changed         
-          	draws_prior <- rmvt(n = 1e6, delta = beta_zero, sigma = scale_prior, df = n*b - k) #prior draws NEW: deltas are changed
+          	draws_post <- rmvt(n = reps, delta = betahat, sigma = scale_post, df = n - k) #posterior draws NEW: deltas are changed         
+          	draws_prior <- rmvt(n = reps, delta = beta_zero, sigma = scale_prior, df = n*b - k) #prior draws NEW: deltas are changed
           
-          	BF <- mean(apply(draws_post%*%t(R_i) > rep(1, 1e6)%*%t(r_i), 1, prod)) / 
-          		mean(apply(draws_prior%*%t(R_i) > rep(1, 1e6)%*%t(r_i), 1, prod)) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
+          	BF <- mean(apply(draws_post%*%t(R_i) > rep(1, reps)%*%t(r_i), 1, prod)) / 
+          		mean(apply(draws_prior%*%t(R_i) > rep(1, reps)%*%t(r_i), 1, prod)) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
           }
       
     } else{ #If 'both comparisons'
@@ -394,13 +395,15 @@ hyp_test <- function(object, hyp){
             }
         
         } else{ #If rank smaller than number of rows, do monte carlo draws
+          if(!is.numeric(mcrep) || !mcrep %% 1 == 0) stop("Input for mcrep should be an integer")
+          reps <- mcrep
 
           #Draw from prior and posterior
-          draws_post <- rmvt(n = 1e6, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
-		      draws_prior <- rmvt(n = 1e6, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
+          draws_post <- rmvt(n = reps, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
+		      draws_prior <- rmvt(n = reps, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
 
-          BFi <- mean(apply(draws_post%*%t(R_iv) > rep(1,1e6)%*%t(r_iv),1,prod)) / 
-          		mean(apply(draws_prior%*%t(R_iv) > rep(1,1e6)%*%t(r_iv),1,prod))
+          BFi <- mean(apply(draws_post%*%t(R_iv) > rep(1,reps)%*%t(r_iv),1,prod)) / 
+          		mean(apply(draws_prior%*%t(R_iv) > rep(1,reps)%*%t(r_iv),1,prod))
           
         } #End inequality part
       
