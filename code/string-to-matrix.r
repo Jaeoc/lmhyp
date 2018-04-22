@@ -138,16 +138,37 @@ create_matrices <- function(object, hyp){
       for(r in seq_along(commas)){ #for each row containing commas
         several <- framed[commas,][r, ] #select row r
     
-        leftvars <- unlist(strsplit(several$left, split = ",")) #separate left hand var
-        rightvars <- unlist(strsplit(several$right, split = ",")) #separate right hand vars
-        if(any(grepl("^$", leftvars)) || any(grepl("^$", rightvars))) stop("Misplaced comma in hypothesis") #if empty element after strsplit
+        if(several$comp == "="){ #If e.g., (X1, X2) = X3, convert to X1 = X2 = X3
+            
+          several <- c(several$left, several$right)
+          separate <- unlist(strsplit(several, split = ",")) #split by special characters and unlist
+          hyp2 <- paste(separate, collapse = "=")
+          
+          pos_comparisons <- unlist(gregexpr("=", hyp2)) #Gives the positions of all comparison signs
+          leftside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+          rightside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+          pos1 <- c(-1, pos_comparisons) #positions to extract data to the leftside of comparisons
+          pos2 <- c(pos_comparisons, nchar(hyp2) + 1) #positions to extract data to the rightside of comparisons
+          for(i in seq_along(pos1)){
+           leftside[i] <- substring(hyp2, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the leftside of a comparison sign
+           rightside[i] <- substring(hyp2, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the rightside of a comparison sign
+          }
+          leftside <- leftside[-length(leftside)] #remove last element which is a NA due to loop formatting
+          rightside <- rightside[-length(rightside)] #remove last element which is a NA due to loop formatting
+          comp <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
+          multiples[[r]] <- data.frame(left = leftside, comp = comp, right = rightside, stringsAsFactors = FALSE) #hypotheses as a dataframe
     
-        left <- rep(leftvars, length.out = length(rightvars)*length(leftvars)) #repeat each leftvars the number of rightvars
-        right <- rep(rightvars, each = length(leftvars)) #complement for rightvars
-        comp <- rep(several$comp, length(left)) #repeat the comparison a corresponding number of times
+          } else{ #If inequality comparison
+          leftvars <- unlist(strsplit(several$left, split = ",")) #separate left hand var
+          rightvars <- unlist(strsplit(several$right, split = ",")) #separate right hand vars
+
+          left <- rep(leftvars, length.out = length(rightvars)*length(leftvars)) #repeat each leftvars the number of rightvars
+          right <- rep(rightvars, each = length(leftvars)) #complement for rightvars
+          comp <- rep(several$comp, length(left)) #repeat the comparison a corresponding number of times
     
-        multiples[[r]] <- data.frame(left = left, comp = comp, right = right, stringsAsFactors = FALSE) #save as df to be able to combine with 'framed'
-      }
+          multiples[[r]] <- data.frame(left = left, comp = comp, right = right, stringsAsFactors = FALSE) #save as df to be able to combine with 'framed'
+          }
+        }
 
       framed <- framed[-commas,] #remove old unfixed rows with commas
       multiples <- do.call(rbind, multiples) #make list into dataframe

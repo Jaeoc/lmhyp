@@ -137,17 +137,38 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
 
         for(r in seq_along(commas)){ #for each row containing commas
           several <- framed[commas,][r, ] #select row r
+
+          if(several$comp == "="){ #If e.g., (X1, X2) = X3, convert to X1 = X2 = X3
+            
+            several <- c(several$left, several$right)
+            separate <- unlist(strsplit(several, split = ",")) #split by special characters and unlist
+            hyp2 <- paste(separate, collapse = "=")
+          
+            pos_comparisons <- unlist(gregexpr("=", hyp2)) #Gives the positions of all comparison signs
+            leftside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+            rightside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+            pos1 <- c(-1, pos_comparisons) #positions to extract data to the leftside of comparisons
+            pos2 <- c(pos_comparisons, nchar(hyp2) + 1) #positions to extract data to the rightside of comparisons
+            for(i in seq_along(pos1)){
+             leftside[i] <- substring(hyp2, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the leftside of a comparison sign
+             rightside[i] <- substring(hyp2, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the rightside of a comparison sign
+            }
+            leftside <- leftside[-length(leftside)] #remove last element which is a NA due to loop formatting
+            rightside <- rightside[-length(rightside)] #remove last element which is a NA due to loop formatting
+            comp <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
+            multiples[[r]] <- data.frame(left = leftside, comp = comp, right = rightside, stringsAsFactors = FALSE) #hypotheses as a dataframe
     
-          leftvars <- unlist(strsplit(several$left, split = ",")) #separate left hand var
-          rightvars <- unlist(strsplit(several$right, split = ",")) #separate right hand vars
-          if(any(grepl("^$", leftvars)) || any(grepl("^$", rightvars))) stop("Misplaced comma in hypothesis") #if empty element after strsplit
+            } else{ #If inequality comparison
+            leftvars <- unlist(strsplit(several$left, split = ",")) #separate left hand var
+            rightvars <- unlist(strsplit(several$right, split = ",")) #separate right hand vars
+
+            left <- rep(leftvars, length.out = length(rightvars)*length(leftvars)) #repeat each leftvars the number of rightvars
+            right <- rep(rightvars, each = length(leftvars)) #complement for rightvars
+            comp <- rep(several$comp, length(left)) #repeat the comparison a corresponding number of times
     
-          left <- rep(leftvars, length.out = length(rightvars)*length(leftvars)) #repeat each leftvars the number of rightvars
-          right <- rep(rightvars, each = length(leftvars)) #complement for rightvars
-          comp <- rep(several$comp, length(left)) #repeat the comparison a corresponding number of times
-    
-          multiples[[r]] <- data.frame(left = left, comp = comp, right = right, stringsAsFactors = FALSE) #save as df to be able to combine with 'framed'
-        }
+            multiples[[r]] <- data.frame(left = left, comp = comp, right = right, stringsAsFactors = FALSE) #save as df to be able to combine with 'framed'
+            }
+          }
 
         framed <- framed[-commas,] #remove old unfixed rows with commas
         multiples <- do.call(rbind, multiples) #make list into dataframe
@@ -262,8 +283,8 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
       scale_prior <- matrix(s2 * RX / (n*b - k), nrow(R_e)) #ncol = number of effects, needs to be in matrix for dmvt
       
       #Hypothesis test
-      log_BF <- dmvt(x = r_e, delta = delta, sigma = scale_post, df = n - k, log = TRUE) - #using logs and backtransforming is more robust
-        dmvt(x = r_e, delta = delta_zero, sigma = scale_prior, df = n*b - k, log = TRUE) 
+      log_BF <- dmvt(x = t(r_e), delta = delta, sigma = scale_post, df = n - k, log = TRUE) - #using logs and backtransforming is more robust
+        dmvt(x = t(r_e), delta = delta_zero, sigma = scale_prior, df = n*b - k, log = TRUE) 
       
       BF <- exp(log_BF)#end 'only equality' option
       
@@ -338,8 +359,8 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
       K_prior <- Tm %*% scale_prior %*% t(Tm)
       
       #Equality BF 
-      log_BF <- dmvt(x = r_e, delta = w_post[1:q_e], sigma = matrix(K_post[1:q_e, 1:q_e], ncol = q_e), df = n - k, log = TRUE) - #sigmas must be matrices due to code of dmvt
-        dmvt(x = r_e, delta = w_prior[1:q_e], sigma = matrix(K_prior[1:q_e, 1:q_e], ncol = q_e), df = n*b - k, log = TRUE)  #using logs and backtransforming is more robust
+      log_BF <- dmvt(x = t(r_e), delta = w_post[1:q_e], sigma = matrix(K_post[1:q_e, 1:q_e], ncol = q_e), df = n - k, log = TRUE) - #sigmas must be matrices due to code of dmvt
+        dmvt(x = t(r_e), delta = w_prior[1:q_e], sigma = matrix(K_prior[1:q_e, 1:q_e], ncol = q_e), df = n*b - k, log = TRUE)  #using logs and backtransforming is more robust
       
       BFe <- exp(log_BF)
       
@@ -428,11 +449,11 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
 #***************************************************
 #Testing the function----
 #***************************************************
-d <- sim_reg_data(c(0.2, 4, 0, 0.2, 1, 0.8))
+d <- sim_reg_data(c(0.2, 4, 0, 0.2, 0.2, 0.8))
 q <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6, data = d)
-object <- q #for testing subsections of the function
+# object <- q #for testing subsections of the function
 
-hyp <- "X1 = X2, (X4, X5) > X6, X3 < -0.1 "
+hyp <- "X1 = X2, (X4, X5) > X6, X3 < -0.1; (X1, X4) = (0, X3)"
 hyp <- "X2 > -10, X1 = X4" #When combined, inequlity comparison part is still bounded at BF = 2
 
 hyp_test(q, hyp)
