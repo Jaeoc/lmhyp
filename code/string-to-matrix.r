@@ -33,6 +33,7 @@ if(!grepl("[><=]{2,}", hyp)) print("yay") else print("booh!") #{n, } #matches so
 #|| same, but returns TRUE as soon as one of the conditonals is true
 grepl("^$", leftvars) #to find an empty string it is necessary to specify start^ and end$
 which(x %in% y) #returns locations sorted, for unsorted locations it's necessary to use match(x, y)
+sub("[^,]+,", "", framed$left[r+1]) #Adding ^ in the beginning of [ ] matches everything except the following character, here ','
 
 #*************************************
 #Testing purposes- function to simulate regression data----
@@ -64,9 +65,7 @@ d <- sim_reg_data(c(0.2, 0.1, 0.3, 0.4, 0.1, 0))
 q <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6, data = d)
 object <- q
 
-hyp <- "X1 = X2, (X4, X5) > X3, X6 < 2" 
-#Problem, can't handle this combination of parentheses and non-parentheses
-#With the parenthesis part surrounded by other comma
+hyp <- "(X6,X2) > 0.5, X2 > -0.9" 
 
 create_matrices(q, hyp)
 #***************************************************
@@ -84,7 +83,7 @@ create_matrices <- function(object, hyp){
   if(is.null(varnames)) stop("Please input proper linear model object")
   
   hyp2 <- gsub(" ", "", hyp) #removes all whitespace
-  if(!grepl("^[0-9a-zA-Z><=,()]+$", hyp2)) stop("Impermissable characters in hypotheses. Only letters, numbers and '> < = (),' permitted") #Self-explanatory. NEW parentehese
+  if(!grepl("^[0-9a-zA-Z><=,().-]+$", hyp2)) stop("Impermissable characters in hypotheses") #Self-explanatory. NEW parentehese
   if(grepl("[><=]{2,}", hyp2)) stop("Do not use combined comparison signs e.g., '>=' or '=='")
   
   step1 <- unlist(strsplit(hyp2, split = "[<>=,()]")) #split by special characters and unlist
