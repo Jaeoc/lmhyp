@@ -7,16 +7,18 @@
 #This function takes as input a linear model object, and hypothesis as a string e.g.,
 hyp <- "X1 > X2 = X3 < X4 = 2"
 #Where each variable must contain at least one letter
-#and each variable is checked against those in the linear model object
-#Permitted input is variables and hypothesized values, and any of the following symbols [><=,()]
+#Each variable must exist in the specified the linear model object
+#Permitted input is variables, hypothesized values, and any of the following symbols [><=,()]
 #Comparison signs have to be single (i.e., not == or =>)
-#Parentheses (optional) and commas can be used for multiple comparisons e.g.,
+#Parentheses can be used for comparing a variable against multiple at once
 hyp <- "X1 > (X2, X4)"
+#Commas can be used to specify independent parts of a hypothesis, e.g.,
+hyp <- "X1 > X2, X3 = 0"
 #Output is a list with restriction matrices for equality and inequality comparisons
 
 #*****************************************
 
-#Things I've learnt
+#Useful information on using regular expressions in R
 strsplit(hyp, split = ">")[[1]] #Gives a list with a character vector split by ">"
 strsplit(hyp, split = c("[>=]")) #If want to do several put them in []
 grepl("\\d", hyp) #checks if there are any digits in the vector (TRUE/FALSE)
@@ -66,6 +68,7 @@ q <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6, data = d)
 object <- q
 
 hyp <- "(X6,X2) > 0.5, X2 > -0.9" 
+hyp <- "X6 < X2> X3, X2 > 0"
 
 create_matrices(q, hyp)
 #***************************************************
@@ -104,7 +107,7 @@ create_matrices <- function(object, hyp){
   comparisons <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
   framed <- data.frame(left = leftside, comp = comparisons, right = rightside, stringsAsFactors = FALSE) #hypotheses as a dataframe
   
-  if(grepl(",", framed$left) || grepl(",", framed$right)){ #Larger loop that deals with commas if the specified hypothesis contains any
+  if(any(grepl(",", framed$left)) || any(grepl(",", framed$right))){ #Larger loop that deals with commas if the specified hypothesis contains any
     if(nrow(framed) > 1){
       for(r in 1:(nrow(framed)-1)){ #If a hypothesis has been specified with commas e.g., "X1 > 0, X2 > 0" or "(X1, X2) > X3"
         if(all.equal(framed$right[r], framed$left[r+1])){ #The right hand side of the hypothesis df will be equal to the next row left side

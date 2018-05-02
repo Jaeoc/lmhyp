@@ -63,6 +63,31 @@ library(MASS)
 
 #Note: If several hypotheses specified in input (separated by semicolons) function loops over parts 2-3 for each hypothesis
 
+#TO DO: 
+#Finish loop at the end
+#Save all necessary values appropriately
+#Fix output
+#Scavenge packages that we only use 1 function from (with credit)
+#Create package
+
+#implement complementary BF. #This is only a concern for *only* inequalities! makes it much simples
+#Steps:
+#1) check number of hypotheses in hyps containing only inequalities - CHECK
+#2) Save only inequality hypothesis in a vector
+#3) check if more than one etc
+#Hmm.. Problem with the checking of overlap. Get draws from prior should mean from the prior of all hypotheses
+#Is there one prior or several? (if: "X1 > 2; X1 > 3" is not possible currently. But what about "X1 > 2; X2 > 3" also two different priors?
+#this seems a bit limiting. But if this is not permissable, then there is only one overall prior for all hypotheses? So in that case I would only
+#have to save the prior delta and sigma for one hypothesis. We do not use the transformed covariance matrix, just the covariance matrix of the lm object and
+#then check if the contraints are fulfilled
+
+#What about the output as probabilities of hypotheses? Just save the posterior probability in each case? That with the complementary hyp = 1? Yes
+
+#For doing the inequality comparison part, I need to save posterior and prior probabilities,the BF (unconstrained), R_i, r_i
+#For final output, I need to save BF for each hypothesis and posterior prob for each hypothesis
+
+
+
 hyp_test <- function(object, hyp, mcrep = 1e6){
   
   #1) initial setup and checks of input----
@@ -84,9 +109,18 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
   
   hyp <- unlist(strsplit(hyp, split = ";")) #For returning specified hypotheses with outcome
   hyps <- unlist(strsplit(hyp2, split = ";")) #Separated hypotheses (if several hypotheses) for use in computations
-  out <- vector("list", length = length(hyps) + 1) #list for final output of each hypothesis, + 1 for product (overall BF)
-  out[[length(out)]] <- 1 #First value for computing overall BF at end (in case of several hypotheses)
+  out_BF <- vector("list", length = length(hyps) + 1) #list for final output of each hypothesis, + 1 for product (overall BF)
+  out_prob <- vector("list", length = length(hyps) + 1) #list for final output of each hypothesis, + 1 for product (overall BF)
+  # out[[length(out)]] <- 1 #First value for computing overall BF at end (in case of several hypotheses)
   
+  BFih <- if(any(!grepl("=", hyps))) {rep(NA, sum(!grepl("=", hyps)))} else{NULL} #NEW
+  if(!is.null(BFih)) {
+    R_i_all <- vector("list", length =  length(BFih))
+    r_i_all <- vector("list", length =  length(BFih))
+    ineq_marker <- 0 #NEW: counts number of inequality only hypotheses
+    BFip_prior <- BFip_posterior <- BFi_all <- BFih
+  }
+
   for(h in seq_along(hyps)){ #loops over the rest of the function until penultimate }
     hyp2 <- hyps[[h]] #for each hypothesis, go through the rest of the function
     
@@ -105,7 +139,7 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
     comparisons <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
     framed <- data.frame(left = leftside, comp = comparisons, right = rightside, stringsAsFactors = FALSE) #hypotheses as a dataframe
     
-    if(grepl(",", framed$left) || grepl(",", framed$right)){ #Larger loop that deals with commas if the specified hypothesis contains any
+    if(any(grepl(",", framed$left)) || any(grepl(",", framed$right))){ #Larger loop that deals with commas if the specified hypothesis contains any
       if(nrow(framed) > 1){
         for(r in 1:(nrow(framed)-1)){ #If a hypothesis has been specified with commas e.g., "X1 > 0, X2 > 0" or "(X1, X2) > X3"
           if(all.equal(framed$right[r], framed$left[r+1])){ #The right hand side of the hypothesis df will be equal to the next row left side
@@ -254,7 +288,7 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
     R_ei <- rbind(R_e,R_i) #Sets prior mean around the specified boundary point instead of zero, eg., in case b1 = 2
     r_ei <- rbind(r_e,r_i) 
 	  Rr_ei <- cbind(R_ei,r_ei) #Creates adjusted matrix
-    beta_zero <- ginv(R_ei)%*%r_ei #NEW: ginv comes from MASS package
+    beta_zero <- ginv(R_ei)%*%r_ei #NEW: ginv comes from MASS package.
     
     if(nrow(Rr_ei) > 1){ #Only relevant if more than one row (and rref only works for >1 row)
       rref_ei <- rref(Rr_ei) #Checks if a common boundary prior exists, e.g., in case b1 > 1, b1 < 2, we would now have two priors, but could be the average between these two
@@ -293,7 +327,8 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
     } else if(comparisons == "only inequality"){
       #**3.2)only-inequality----
       
-        r_i <- as.vector(r_i) #For pmvt must be a vector contrary to for dmvt.
+      ineq_marker <- ineq_marker + 1  
+      r_i <- as.vector(r_i) #For pmvt must be a vector contrary to for dmvt.
 
           if(rankMatrix(R_i)[[1]] == nrow(R_i)){ #If matrix rank is equal to number of rows do exact test.
           	
@@ -312,28 +347,40 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
         	scale_prior <- s2 * RX / (n*b - k) 
           	
             if(nrow(scale_post) == 1){ #If univariate
-              BF <- pt((r_i - delta) / sqrt(scale_post), df = n - k, lower.tail = FALSE)[1] / #posterior
-                pt((r_i - delta_zero) / sqrt(scale_prior), df = n*b - k, lower.tail = FALSE)[1] #prior
+              prior_prob <- pt((r_i - delta_zero) / sqrt(scale_prior), df = n*b - k, lower.tail = FALSE)[1] #NEW
+              posterior_prob <- pt((r_i - delta) / sqrt(scale_post), df = n - k, lower.tail = FALSE)[1] #NEW
+              BF <- posterior_prob / prior_prob #prior
             } else { #if multivariate
-              BF <- pmvt(lower = r_i, upper = Inf, delta = delta, sigma = scale_post, df = n - k, type = "shifted")[1] / #posterior
-                pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_prior, df = n*b - k, type = "shifted")[1] #prior
+              prior_prob <- pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_prior, df = n*b - k, type = "shifted")[1] #NEW
+              posterior_prob <- pmvt(lower = r_i, upper = Inf, delta = delta, sigma = scale_post, df = n - k, type = "shifted")[1] 
+              BF <- posterior_prob / prior_prob
             }
           
           } else{#No transformation is possible. Alternative method using monte carlo draws if matrix rank not equal to numer of rows
           	if(!is.numeric(mcrep) || !mcrep %% 1 == 0) stop("Input for mcrep should be an integer")
-            reps <- mcrep
-        	  #Scale matrix for posterior t-distribution.
-        	scale_post <- vcov(object)
+
+            #Scale matrix for posterior t-distribution.
+        	  scale_post <- vcov(object)
         
-        	#Scale matrix for prior t-distribution
-        	scale_prior <- vcov(object) * (n - k) / (n*b - k)
+        	  #Scale matrix for prior t-distribution
+        	  scale_prior <- vcov(object) * (n - k) / (n*b - k)
         	          	
-          	draws_post <- rmvt(n = reps, delta = betahat, sigma = scale_post, df = n - k) #posterior draws NEW: deltas are changed         
-          	draws_prior <- rmvt(n = reps, delta = beta_zero, sigma = scale_prior, df = n*b - k) #prior draws NEW: deltas are changed
-          
-          	BF <- mean(apply(draws_post%*%t(R_i) > rep(1, reps)%*%t(r_i), 1, prod)) / 
-          		mean(apply(draws_prior%*%t(R_i) > rep(1, reps)%*%t(r_i), 1, prod)) #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
+          	draws_post <- rmvt(n = mcrep, delta = betahat, sigma = scale_post, df = n - k) #posterior draws NEW: deltas are changed         
+          	draws_prior <- rmvt(n = mcrep, delta = beta_zero, sigma = scale_prior, df = n*b - k) #prior draws NEW: deltas are changed
+            
+          	prior_prob <- mean(apply(draws_prior%*%t(R_i) > rep(1, mcrep)%*%t(r_i), 1, prod)) #NEW
+          	posterior_prob <- mean(apply(draws_post%*%t(R_i) > rep(1, mcrep)%*%t(r_i), 1, prod)) 
+          	BF <- posterior_prob / prior_prob #proportion posterior draws satisfying all constrains / prior draws satisfying all constraint
+          	
           }
+      
+      BFih[ineq_marker] <- h #gives which hypothesis amongst all the specified this one is NEW
+      BFi_all[ineq_marker] <- BF #saves BF for specified hypothesis vs. unconstrained hypothesis
+      BFip_prior[ineq_marker] <- prior_prob #Saves the prior probability of hypothesis
+      BFip_posterior[ineq_marker] <- posterior_prob #saves the posterior probability of hypothesis
+      R_i_all[[ineq_marker]] <- R_i #save restriction matrices
+      r_i_all[[ineq_marker]] <- r_i #save restriction matrices
+
       
     } else{ #If 'both comparisons'
       
@@ -419,14 +466,13 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
         
         } else{ #If rank smaller than number of rows, do monte carlo draws
           if(!is.numeric(mcrep) || !mcrep %% 1 == 0) stop("Input for mcrep should be an integer")
-          reps <- mcrep
 
           #Draw from prior and posterior
-          draws_post <- rmvt(n = reps, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
-		      draws_prior <- rmvt(n = reps, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
+          draws_post <- rmvt(n = mcrep, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
+		      draws_prior <- rmvt(n = mcrep, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
 
-          BFi <- mean(apply(draws_post%*%t(R_iv) > rep(1,reps)%*%t(r_iv),1,prod)) / 
-          		mean(apply(draws_prior%*%t(R_iv) > rep(1,reps)%*%t(r_iv),1,prod))
+          BFi <- mean(apply(draws_post%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod)) / 
+          		mean(apply(draws_prior%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod))
           
         } #End inequality part
       
@@ -435,13 +481,41 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
       
       } #end 'both comparisons' option
     
-    out[[h]] <- BF #Output for each specified hypothesis
-    names(out)[[h]] <- paste0("Bayes Factor for '", hyp[[h]], "' vs. not '", hyp[[h]], "'") #name list with hypothesis as originally specified
-    out[[length(out)]] <- out[[length(out)]] * BF #combined BF for all hypotheses
+    out_BF[[h]] <- BF #Output for each specified hypothesis
+    out_prob[[h]] <- posterior_prob #Save posterior probabilities. NB! What about in the case of both comparisons
+    # names(out)[[h]] <- paste0("Bayes Factor for '", hyp[[h]], "' vs. not '", hyp[[h]], "'") #name list with hypothesis as originally specified
+    # out[[length(out)]] <- out[[length(out)]] * BF #combined BF for all hypotheses
     
+  } #end loop over all hypotheses
+  
+  if(!is.null(BFih)){ #NEW: Check for "only inequality" hypotheses
+    if(length(BFih) == 1){ #If only 1 inequality only hypothesis
+     BFc <- (1 - BFip_posterior) / (1 - BFip_prior) #complementary hypothesis 
+    } else{ 
+     R_i_all <- do.call(rbind, R_i_all) #Create one large adjusted restriction matrix 
+     r_i_all <- do.call(rbind, r_i_all) #Create one large adjusted restriction matrix 
+     
+     ineq_draws <- rmvt(n = 1e4, delta = beta_zero, sigma = vcov(object) * (n - k) / (n*b - k), df = (n*b - k)) #Uses beta_zero from last hyp
+     overlap <- mean(apply(ineq_draws%*%t(R_i_all) > rep(1, 1e4)%*%t(r_i_all), 1, prod)) #Check if there is  draw satisfying all constraints
+     if(overlap == 0){ #if no overlap between constraints
+      BFc <-  (1 - sum(BFip_posterior)) / (1 - sum(BFip_prior))
+     } else{
+       prob_overlap <- mean(rowSums(ineq_draws%*%t(R_i_all) > rep(1, 1e4)%*%t(r_i_all)) > 0)
+     }
+    }
   }
   
+  #DEMO----------------------------
+  ineq_draws_prior <- rmvt(n = 1e4, delta = beta_zero, sigma = vcov(object) * (n - k) / (n*b - k), df = (n*b - k)) #Uses beta_zero from last hyp
+  ineq_draws_posterior <- rmvt(n = 1e4, delta = betahat, sigma = vcov(object), df = n - k) 
+  prob_prior <- mean(rowSums(ineq_draws_prior%*%t(R_i_all) > rep(1, 1e4)%*%t(r_i_all)) > 0) #Sums vectors, checks if > 0, takes mean
+  prob_posterior <- mean(rowSums(ineq_draws_posterior%*%t(R_i_all) > rep(1, 1e4)%*%t(r_i_all)) > 0)
+  BFc <- (1 - prob_posterior) / (1 - prob_prior)
+  #--------------------
+  
+  
   names(out)[[length(out)]] <- "Overall Bayes Factor for all hypotheses (if several)" 
+  class(out) <- "hyp"
   out #final output is a list with all specified hypotheses
   
 }
@@ -453,11 +527,16 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
 #***************************************************
 d <- sim_reg_data(c(0.2, 4, 0, 0.2, 0.2, 0.8))
 q <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6, data = d)
-# object <- q #for testing subsections of the function
+object <- q #for testing subsections of the function
 
 hyp <- "X1 = X2, (X4, X5) > X6, X3 < -0.1; (X1, X4) = (0, X3)"
-hyp <- "X2 > -10, X1 = X4" #When combined, inequlity comparison part is still bounded at BF = 2
+hyp <- "X2 > -10; X2 > X3" #When combined, inequlity comparison part is still bounded at BF = 2
 
-hyp_test(q, hyp)
+a <- hyp_test(q, hyp)
 
+print.hyp <- function(x, ...){ #print method. Has to include the x and ...
+  print(x[[1]]) #typical is to use a lot of cat calls, newline can for example be produced by cat(\n)
+}
 
+#Appears that you simply include the print method in the package with something like S3method(print, hyp), should be fairly straightforward
+#Should create a list with all objects I want and then have my print-method just print what I desire
