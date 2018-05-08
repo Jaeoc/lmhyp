@@ -134,19 +134,24 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
     hyp2 <- hyps[[h]] #for each hypothesis, go through the rest of the function
     
     #2)hyp-to-matrices----
-    pos_comparisons <- unlist(gregexpr("[<>=]", hyp2)) #Gives the positions of all comparison signs
-    leftside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
-    rightside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
-    pos1 <- c(-1, pos_comparisons) #positions to extract data to the leftside of comparisons
-    pos2 <- c(pos_comparisons, nchar(hyp2) + 1) #positions to extract data to the rightside of comparisons
-    for(i in seq_along(pos1)){
-      leftside[i] <- substring(hyp2, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the leftside of a comparison sign
-      rightside[i] <- substring(hyp2, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the rightside of a comparison sign
+    framer <- function(x){
+      pos_comparisons <- unlist(gregexpr("[<>=]", x)) #Gives the positions of all comparison signs
+      leftside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+      rightside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
+      pos1 <- c(-1, pos_comparisons) #positions to extract data to the leftside of comparisons
+      pos2 <- c(pos_comparisons, nchar(x) + 1) #positions to extract data to the rightside of comparisons
+      for(i in seq_along(pos1)){
+        leftside[i] <- substring(x, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the leftside of a comparison sign
+        rightside[i] <- substring(x, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the rightside of a comparison sign
+      }
+      leftside <- leftside[-length(leftside)] #remove last element which is a NA due to loop formatting
+      rightside <- rightside[-length(rightside)] #remove last element which is a NA due to loop formatting
+      comparisons <- substring(x, pos_comparisons, pos_comparisons) #Extract comparison signs
+      data.frame(left = leftside, comp = comparisons, right = rightside, stringsAsFactors = FALSE) #hypotheses as a dataframe
     }
-    leftside <- leftside[-length(leftside)] #remove last element which is a NA due to loop formatting
-    rightside <- rightside[-length(rightside)] #remove last element which is a NA due to loop formatting
-    comparisons <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
-    framed <- data.frame(left = leftside, comp = comparisons, right = rightside, stringsAsFactors = FALSE) #hypotheses as a dataframe
+    
+    framed <- framer(hyp2)
+    #--------------------------
     
     if(any(grepl(",", framed$left)) || any(grepl(",", framed$right))){ #Larger loop that deals with commas if the specified hypothesis contains any
       if(nrow(framed) > 1){
@@ -186,21 +191,8 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
             several <- c(several$left, several$right)
             separate <- unlist(strsplit(several, split = ",")) #split by special characters and unlist
             if(any(grepl("^$", several))) stop("Misplaced comma in hypothesis") #if empty element
-            hyp2 <- paste(separate, collapse = "=") #convert to X1 = X2 = X3 shape
-          
-            pos_comparisons <- unlist(gregexpr("=", hyp2)) #Gives the positions of all comparison signs
-            leftside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
-            rightside <- rep(NA, length(pos_comparisons) + 1) #empty vector for loop below
-            pos1 <- c(-1, pos_comparisons) #positions to extract data to the leftside of comparisons
-            pos2 <- c(pos_comparisons, nchar(hyp2) + 1) #positions to extract data to the rightside of comparisons
-            for(i in seq_along(pos1)){
-             leftside[i] <- substring(hyp2, pos1[i] + 1, pos1[i+1] - 1) #Extract all variables or outcomes to the leftside of a comparison sign
-             rightside[i] <- substring(hyp2, pos2[i] + 1, pos2[i+1] - 1) #Extract all variables or outcomes to the rightside of a comparison sign
-            }
-            leftside <- leftside[-length(leftside)] #remove last element which is a NA due to loop formatting
-            rightside <- rightside[-length(rightside)] #remove last element which is a NA due to loop formatting
-            comp <- substring(hyp2, pos_comparisons, pos_comparisons) #Extract comparison signs
-            multiples[[r]] <- data.frame(left = leftside, comp = comp, right = rightside, stringsAsFactors = FALSE) #hypotheses as a dataframe
+            converted_equality <- paste(separate, collapse = "=") #convert to X1 = X2 = X3 shape
+            multiples[[r]] <- framer(converted_equality) #hypotheses as a dataframe
     
             } else{ #If inequality comparison
             leftvars <- unlist(strsplit(several$left, split = ",")) #separate left hand var
