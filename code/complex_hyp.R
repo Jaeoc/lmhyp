@@ -5,8 +5,9 @@
 
 #Content----
 #a) Function to simulate regression data
-#b) hypothesis testing function
-#c) code for trying out b)
+#b) print method
+#c) hypothesis testing function
+#d) code for trying out c)
 
 
 #*************************************
@@ -38,6 +39,39 @@ sim_reg_data <- function(betas, intercept = 0,  sigma2 = 1, n = 100){
 ##Possible refinements: Other defaults?
 
 #*************************************
+#Print method----
+#*************************************
+#Determines printed output for an object of class "hyp"
+print.hyp <- function(x, ...){ #print method. Has to include the x and ...
+  cat("  Specified hypotheses")
+  cat("\n")
+  cat("\n")
+  for(h in seq_along(x$hypotheses)){
+    cat(paste0("  H", h, ":   ", '"', x$hypotheses[h], '"'))
+    cat("\n")
+  }
+  cat("\n")
+  cat(paste0("  Bayes Factors for each hypothesis vs. their complement (rounded)"))
+  cat("\n")
+  cat("\n")
+  for(h in seq_along(x$hypotheses)){
+    cat(paste0("  BF H", h, ":   ", format(round(x$BF_complement[h], digits = 4), scientific = FALSE)))
+    cat("\n")
+  }
+  cat("\n")
+  cat(paste0("  Posterior probability of each hypothesis and their complement (rounded)"))
+  cat("\n")
+  cat("\n")
+  for(h in seq_along(x$hypotheses)){
+    cat(paste0("  H", h, ":   ", format(round(x$post_prob[h], digits = 4), scientific = FALSE)))
+    cat("\n")
+  }
+  cat(paste0("  Hc:   ", format(round(x$post_prob[length(x$post_prob)], digits = 4), scientific = FALSE)))
+}
+
+#Appears that you simply include the print method in the package with something like S3method(print, hyp), should be fairly straightforward
+
+#*************************************
 #Hypothesis testing function----
 #*************************************
 #Requires mvtnorm
@@ -59,34 +93,10 @@ library(MASS)
 #**3.1) Only equality comparisons
 #**3.2) Only inequality comparisons
 #**3.3) both
+#4) If any 'only inequality' hypotheses update their BF from vs. unconstrained to vs. complement
 #END
 
 #Note: If several hypotheses specified in input (separated by semicolons) function loops over parts 2-3 for each hypothesis
-
-#TO DO: 
-#Finish loop at the end
-#Save all necessary values appropriately
-#Fix output
-#Scavenge packages that we only use 1 function from (with credit)
-#Create package
-
-#implement complementary BF. #This is only a concern for *only* inequalities! makes it much simples
-#Steps:
-#1) check number of hypotheses in hyps containing only inequalities - CHECK
-#2) Save only inequality hypothesis in a vector
-#3) check if more than one etc
-#Hmm.. Problem with the checking of overlap. Get draws from prior should mean from the prior of all hypotheses
-#Is there one prior or several? (if: "X1 > 2; X1 > 3" is not possible currently. But what about "X1 > 2; X2 > 3" also two different priors?
-#this seems a bit limiting. But if this is not permissable, then there is only one overall prior for all hypotheses? So in that case I would only
-#have to save the prior delta and sigma for one hypothesis. We do not use the transformed covariance matrix, just the covariance matrix of the lm object and
-#then check if the contraints are fulfilled
-
-#What about the output as probabilities of hypotheses? Just save the posterior probability in each case? That with the complementary hyp = 1? Yes
-
-#For doing the inequality comparison part, I need to save posterior and prior probabilities,the BF (unconstrained), R_i, r_i
-#For final output, I need to save BF for each hypothesis and posterior prob for each hypothesis
-
-
 
 hyp_test <- function(object, hyp, mcrep = 1e6){
   
@@ -108,17 +118,16 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
   if(!all(input_vars %in% varnames)) stop("Hypothesis variable(s) not in object, check spelling") #Checks if input variables exist in lm-object
   
   hyp <- unlist(strsplit(hyp, split = ";")) #For returning specified hypotheses with outcome
+  for(no in seq_along(hyp)){names(hyp)[no] <- paste0("H", no)} #Name vector of hypotheses for output
   hyps <- unlist(strsplit(hyp2, split = ";")) #Separated hypotheses (if several hypotheses) for use in computations
-  out_BF <- vector("list", length = length(hyps) + 1) #list for final output of each hypothesis, + 1 for product (overall BF)
-  out_prob <- vector("list", length = length(hyps) + 1) #list for final output of each hypothesis, + 1 for product (overall BF)
-  # out[[length(out)]] <- 1 #First value for computing overall BF at end (in case of several hypotheses)
-  
-  BFih <- if(any(!grepl("=", hyps))) {rep(NA, sum(!grepl("=", hyps)))} else{NULL} #NEW
+  out_BF <- rep(NA, length = length(hyps)) #list for final output of each hypothesis
+
+  BFih <- if(any(!grepl("=", hyps))) {rep(NA, sum(!grepl("=", hyps)))} else{NULL}
   if(!is.null(BFih)) {
     R_i_all <- vector("list", length =  length(BFih))
     r_i_all <- vector("list", length =  length(BFih))
-    ineq_marker <- 0 #NEW: counts number of inequality only hypotheses
-    BFip_prior <- BFip_posterior <- BFi_all <- BFih
+    ineq_marker <- 0 #counter for number of inequality only hypotheses
+    BFip_prior <- BFip_posterior <- BFih
   }
 
   for(h in seq_along(hyps)){ #loops over the rest of the function until penultimate }
@@ -375,11 +384,10 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
           }
       
       BFih[ineq_marker] <- h #gives which hypothesis amongst all the specified this one is NEW
-      BFi_all[ineq_marker] <- BF #saves BF for specified hypothesis vs. unconstrained hypothesis
       BFip_prior[ineq_marker] <- prior_prob #Saves the prior probability of hypothesis
       BFip_posterior[ineq_marker] <- posterior_prob #saves the posterior probability of hypothesis
       R_i_all[[ineq_marker]] <- R_i #save restriction matrices
-      r_i_all[[ineq_marker]] <- r_i #save restriction matrices
+      r_i_all[[ineq_marker]] <- matrix(r_i) #save restriction matrices
 
       
     } else{ #If 'both comparisons'
@@ -481,42 +489,54 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
       
       } #end 'both comparisons' option
     
-    out_BF[[h]] <- BF #Output for each specified hypothesis
-    out_prob[[h]] <- posterior_prob #Save posterior probabilities. NB! What about in the case of both comparisons
-    # names(out)[[h]] <- paste0("Bayes Factor for '", hyp[[h]], "' vs. not '", hyp[[h]], "'") #name list with hypothesis as originally specified
-    # out[[length(out)]] <- out[[length(out)]] * BF #combined BF for all hypotheses
-    
+    out_BF[h] <- BF #Output for each specified hypothesis
+    names(out_BF)[[h]] <- paste0("H", h) #names by number e.g. H1, H2 etc
+
   } #end loop over all hypotheses
   
-  if(!is.null(BFih)){ #NEW: Check for "only inequality" hypotheses
+  BFu <- out_BF #BF for hyp vs. unconstrained
+
+  if(!is.null(BFih)){ #NEW: Check if any "only inequality" hypotheses
     if(length(BFih) == 1){ #If only 1 inequality only hypothesis
      BFc <- (1 - BFip_posterior) / (1 - BFip_prior) #complementary hypothesis 
     } else{ 
-     R_i_all <- do.call(rbind, R_i_all) #Create one large adjusted restriction matrix 
-     r_i_all <- do.call(rbind, r_i_all) #Create one large adjusted restriction matrix 
+      R_i_overlap <- do.call(rbind, R_i_all)
+      r_i_overlap <- do.call(rbind, r_i_all)
+      
+      ineq_draws_prior <- rmvt(n = 1e4, delta = beta_zero, sigma = vcov(object) * (n - k) / (n*b - k), df = (n*b - k)) #Uses beta_zero from last hyp
+      overlap <- mean(apply(ineq_draws_prior%*%t(R_i_overlap) > rep(1, 1e4)%*%t(r_i_overlap), 1, prod)) #Check if there is a draw satisfying all constraints
      
-     ineq_draws <- rmvt(n = 1e4, delta = beta_zero, sigma = vcov(object) * (n - k) / (n*b - k), df = (n*b - k)) #Uses beta_zero from last hyp
-     overlap <- mean(apply(ineq_draws%*%t(R_i_all) > rep(1, 1e4)%*%t(r_i_all), 1, prod)) #Check if there is  draw satisfying all constraints
-     if(overlap == 0){ #if no overlap between constraints
+     if(overlap == 0){ #if no overlap between hypotheses
       BFc <-  (1 - sum(BFip_posterior)) / (1 - sum(BFip_prior))
-     } else{
-       prob_overlap <- mean(rowSums(ineq_draws%*%t(R_i_all) > rep(1, 1e4)%*%t(r_i_all)) > 0)
+     } else{ #if overlapping hypotheses
+       ineq_draws_posterior <- rmvt(n = 1e4, delta = betahat, sigma = vcov(object), df = n - k) 
+       ineq_draws_prior <- rmvt(n = 1e4, delta = beta_zero, sigma = vcov(object) * (n - k) / (n*b - k), df = (n*b - k)) #Can be removed, only here for clarity
+
+       #Check whether all constraints are fulfilled for each hypothesis, returns list with 0/1s for each hypothesis
+       constraints_prior <- Map(function(Ri, ri){apply(ineq_draws_prior%*%t(Ri) > rep(1,1e4)%*%t(ri), 1, prod)}, R_i_all, r_i_all) #Check whether all constraints are fulfilled for each hypothesis
+       constraints_posterior <- Map(function(Ri, ri){apply(ineq_draws_posterior%*%t(Ri) > rep(1,1e4)%*%t(ri), 1, prod)}, R_i_all, r_i_all) 
+  
+       prob_prior <- mean(Reduce(`+`, constraints_prior) > 0) #sums whether each draw fulfilled constraints across hypotheses and checks proportion non-zero results
+       prob_posterior <- mean(Reduce(`+`, constraints_posterior) > 0) #same for posterior
+       BFc <- (1 - prob_posterior) / (1 - prob_prior) #BF for complement to all inequality only hypotheses vs. unconstrained
      }
     }
-  }
+
+    out_BF[BFih] <- out_BF[BFih] / BFc #Convert BFi vs. unconstrained into BFi vs. complement
+    } else{ #If no inequality only hypotheses
+      BFc <- 1
+    }
   
-  #DEMO----------------------------
-  ineq_draws_prior <- rmvt(n = 1e4, delta = beta_zero, sigma = vcov(object) * (n - k) / (n*b - k), df = (n*b - k)) #Uses beta_zero from last hyp
-  ineq_draws_posterior <- rmvt(n = 1e4, delta = betahat, sigma = vcov(object), df = n - k) 
-  prob_prior <- mean(rowSums(ineq_draws_prior%*%t(R_i_all) > rep(1, 1e4)%*%t(r_i_all)) > 0) #Sums vectors, checks if > 0, takes mean
-  prob_posterior <- mean(rowSums(ineq_draws_posterior%*%t(R_i_all) > rep(1, 1e4)%*%t(r_i_all)) > 0)
-  BFc <- (1 - prob_posterior) / (1 - prob_prior)
-  #--------------------
+  out_hyp_prob <- c(BFu, BFc) / sum(BFu + BFc) #posterior probabilities for hypotheses. 
+  names(out_hyp_prob)[length(out_hyp_prob)] <- "Complement"
   
+  BF_matrix <- matrix(rep(BFu, length(BFu)), ncol = length(BFu), byrow = TRUE) #Create matrix with all BF
+  BF_matrix <- BF_matrix / BFu #Compare hypotheses against each other
+  colnames(BF_matrix) <- rownames(BF_matrix) <- names(BFu)
   
-  names(out)[[length(out)]] <- "Overall Bayes Factor for all hypotheses (if several)" 
+  out <- list(BF_complement = out_BF, BF_matrix = BF_matrix, post_prob = out_hyp_prob, hypotheses = hyp)
   class(out) <- "hyp"
-  out #final output is a list with all specified hypotheses
+  out #final output
   
 }
 #End----
@@ -525,18 +545,14 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
 #***************************************************
 #Testing the function----
 #***************************************************
-d <- sim_reg_data(c(0.2, 4, 0, 0.2, 0.2, 0.8))
+d <- sim_reg_data(c(0.2, 0.6, 0, 0.2, -0.2, 0.8))
 q <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6, data = d)
 object <- q #for testing subsections of the function
 
 hyp <- "X1 = X2, (X4, X5) > X6, X3 < -0.1; (X1, X4) = (0, X3)"
-hyp <- "X2 > -10; X2 > X3" #When combined, inequlity comparison part is still bounded at BF = 2
+hyp <- "X2 > X1 > 0; X2 < X1 > 0" 
+hyp <- "X2 > X1 > X5; X2 > X1 = X5"
 
-a <- hyp_test(q, hyp)
+hyp_test(q, hyp) #test hypotheses
+a <- hyp_test(q, hyp) #If saved as object can acces all output list-elements
 
-print.hyp <- function(x, ...){ #print method. Has to include the x and ...
-  print(x[[1]]) #typical is to use a lot of cat calls, newline can for example be produced by cat(\n)
-}
-
-#Appears that you simply include the print method in the package with something like S3method(print, hyp), should be fairly straightforward
-#Should create a list with all objects I want and then have my print-method just print what I desire
