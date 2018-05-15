@@ -43,33 +43,34 @@ sim_reg_data <- function(betas, intercept = 0,  sigma2 = 1, n = 100){
 #*************************************
 #Determines printed output for an object of class "hyp"
 print.hyp <- function(x, ...){ #print method. Has to include the x and ...
-  cat("  Specified hypotheses")
+  cat("Hypotheses:")
   cat("\n")
   cat("\n")
   for(h in seq_along(x$hypotheses)){
     cat(paste0("  H", h, ":   ", '"', x$hypotheses[h], '"'))
     cat("\n")
   }
-  cat("\n")
-  cat(paste0("  Bayes Factors for each hypothesis vs. their complement (rounded)"))
-  cat("\n")
-  cat("\n")
-  for(h in seq_along(x$hypotheses)){
-    cat(paste0("  BF H", h, ":   ", format(round(x$BF_complement[h], digits = 4), scientific = FALSE)))
+  if(!(length(x$hypotheses) == length(x$post_prob))){ #If not exhaustive
+    if(length(x$hypotheses) == 1){cat('  Hc:   "Not H1"') #if only one hypotheses
+    } else{cat(paste0('  Hc:   "Not H1-H', length(x$hypotheses), '"'))
+    }
     cat("\n")
   }
-  cat("\n")
-  cat(paste0("  Posterior probability of each hypothesis and their complement (rounded)"))
-  cat("\n")
-  cat("\n")
-  for(h in seq_along(x$hypotheses)){
-    cat(paste0("  H", h, ":   ", format(round(x$post_prob[h], digits = 4), scientific = FALSE)))
-    cat("\n")
-  }
-  cat(paste0("  Hc:   ", format(round(x$post_prob[length(x$post_prob)], digits = 4), scientific = FALSE)))
-}
 
+  cat("\n")
+  cat(paste0("Posterior probability of each hypothesis (rounded):"))
+  cat("\n")
+  cat("\n")
+  for(h in seq_along(x$hypotheses)){
+    cat(paste0("  H", h, ":   ", format(round(x$post_prob[h], digits = 4), nsmall = 4, scientific = FALSE)))
+    cat("\n")
+  }
+  if(!(length(x$hypotheses) == length(x$post_prob))){
+    cat(paste0("  Hc:   ", format(round(x$post_prob[length(x$post_prob)], digits = 4), nsmall = 4,  scientific = FALSE)))
+    }
+}
 #Appears that you simply include the print method in the package with something like S3method(print, hyp), should be fairly straightforward
+
 
 #*************************************
 #Hypothesis testing function----
@@ -117,17 +118,17 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
   input_vars <- step1[grep("[a-zA-Z]+", step1)] #extract subunits that contain at least one letter
   if(!all(input_vars %in% varnames)) stop("Hypothesis variable(s) not in object, check spelling") #Checks if input variables exist in lm-object
   
-  hyp <- unlist(strsplit(hyp, split = ";")) #For returning specified hypotheses with outcome
+  hyp <- unlist(strsplit(hyp2, split = ";")) #For returning specified hypotheses with outcome
   for(no in seq_along(hyp)){names(hyp)[no] <- paste0("H", no)} #Name vector of hypotheses for output
   hyps <- unlist(strsplit(hyp2, split = ";")) #Separated hypotheses (if several hypotheses) for use in computations
-  out_BF <- rep(NA, length = length(hyps)) #list for final output of each hypothesis
+  BFu <- rep(NA, length = length(hyps)) #list for final output of each hypothesis
 
-  BFih <- if(any(!grepl("=", hyps))) {rep(NA, sum(!grepl("=", hyps)))} else{NULL}
-  if(!is.null(BFih)) {
-    R_i_all <- vector("list", length =  length(BFih))
-    r_i_all <- vector("list", length =  length(BFih))
+  BFip_posterior <- if(any(!grepl("=", hyps))) {rep(NA, sum(!grepl("=", hyps)))} else{NULL} #variables if any hypotheses with only inequality
+  if(!is.null(BFip_posterior)) {
+    R_i_all <- vector("list", length =  length(BFip_posterior))
+    r_i_all <- vector("list", length =  length(BFip_posterior))
     ineq_marker <- 0 #counter for number of inequality only hypotheses
-    BFip_prior <- BFip_posterior <- BFih
+    BFip_prior <- BFip_posterior
   }
 
   for(h in seq_along(hyps)){ #loops over the rest of the function until penultimate }
@@ -151,8 +152,7 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
     }
     
     framed <- framer(hyp2)
-    #--------------------------
-    
+
     if(any(grepl(",", framed$left)) || any(grepl(",", framed$right))){ #Larger loop that deals with commas if the specified hypothesis contains any
       if(nrow(framed) > 1){
         for(r in 1:(nrow(framed)-1)){ #If a hypothesis has been specified with commas e.g., "X1 > 0, X2 > 0" or "(X1, X2) > X3"
@@ -220,28 +220,28 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
     if(nrow(equality) == 0) { #If there are no '=' comparisons set to NULL
       R_e <- r_e <- NULL
     } else{
-    outcomes <- suppressWarnings(apply(equality[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
-    outcomes <- matrix(outcomes, ncol = 2, byrow = FALSE) #Conversion to matrix in case there was only one row in outcomes
-    if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 = 2', check hypotheses")
-    rows <- which(rowSums(is.na(outcomes)) < 2) #which rows contain a numeric value (comparing variable to value), that is not two NA-values
-    specified <- t(outcomes[rows,]) #transpose so that specified comparison values are extracted in correct order below, e.g, in case when "X1 = 0, 2 = X2"
-    specified <- specified[!is.na(specified)] #extract specified comparison values
-    r_e <- ifelse(rowSums(is.na(outcomes)) == 2, 0, specified) #If variable = variable -> 0, if variable = value -> value
-    r_e <- matrix(r_e) #convert to matrix
-    
-    var_locations <- apply(equality[, -2], 2, function(x) ifelse(x %in% varnames, match(x, varnames), 0)) #convert non-variables to 0 and others are given their locations in varnames
-    var_locations <- matrix(var_locations, ncol = 2) #Necessary if only one comparison row
-    
-    R_e <- matrix(rep(0, nrow(equality)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
-    
-    for(i in seq_along(r_e)){ # for each row i in R_e, replace the columns specified in var_locations row i
-      if(!all(var_locations[i, ] > 0)){ #If only one variable is specified (i.e., other one is set to zero)
-        R_e[i, var_locations[i,]] <- 1 #Set this variable to 1 in R_e row i
-      } else{ #If two variables specified
-        R_e[i, var_locations[i,]] <- c(1, -1) #Set one column to 1 and the other to -1 in R_e row i
+      outcomes <- suppressWarnings(apply(equality[, -2], 2, as.numeric)) #Convert left/right to numeric, non-numeric values (variables) coerced to NA 
+      outcomes <- matrix(outcomes, ncol = 2, byrow = FALSE) #Conversion to matrix in case there was only one row in outcomes
+      if(any(rowSums(is.na(outcomes)) == 0)) stop("Value compared with value rather than variable, e.g., '2 = 2', check hypotheses")
+      rows <- which(rowSums(is.na(outcomes)) < 2) #which rows contain a numeric value (comparing variable to value), that is not two NA-values
+      specified <- t(outcomes[rows,]) #transpose so that specified comparison values are extracted in correct order below, e.g, in case when "X1 = 0, 2 = X2"
+      specified <- specified[!is.na(specified)] #extract specified comparison values
+      r_e <- ifelse(rowSums(is.na(outcomes)) == 2, 0, specified) #If variable = variable -> 0, if variable = value -> value
+      r_e <- matrix(r_e) #convert to matrix
+      
+      var_locations <- apply(equality[, -2], 2, function(x) ifelse(x %in% varnames, match(x, varnames), 0)) #convert non-variables to 0 and others are given their locations in varnames
+      var_locations <- matrix(var_locations, ncol = 2) #Necessary if only one comparison row
+      
+      R_e <- matrix(rep(0, nrow(equality)*length(varnames)), ncol = length(varnames)) #Create empty variable matrix
+      
+      for(i in seq_along(r_e)){ # for each row i in R_e, replace the columns specified in var_locations row i
+        if(!all(var_locations[i, ] > 0)){ #If only one variable is specified (i.e., other one is set to zero)
+          R_e[i, var_locations[i,]] <- 1 #Set this variable to 1 in R_e row i
+        } else{ #If two variables specified
+          R_e[i, var_locations[i,]] <- c(1, -1) #Set one column to 1 and the other to -1 in R_e row i
+        }
       }
     }
-  }
     
     
     #****Inequality part string-to-matrix
@@ -289,10 +289,10 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
     R_ei <- rbind(R_e,R_i) #Sets prior mean around the specified boundary point instead of zero, eg., in case b1 = 2
     r_ei <- rbind(r_e,r_i) 
 	  Rr_ei <- cbind(R_ei,r_ei) #Creates adjusted matrix
-    beta_zero <- ginv(R_ei)%*%r_ei #NEW: ginv comes from MASS package.
+    beta_zero <- MASS::ginv(R_ei)%*%r_ei #NEW: ginv comes from MASS package.
     
     if(nrow(Rr_ei) > 1){ #Only relevant if more than one row (and rref only works for >1 row)
-      rref_ei <- rref(Rr_ei) #Checks if a common boundary prior exists, e.g., in case b1 > 1, b1 < 2, we would now have two priors, but could be the average between these two
+      rref_ei <- pracma::rref(Rr_ei) #Checks if a common boundary prior exists, e.g., in case b1 > 1, b1 < 2, we would now have two priors, but could be the average between these two
       nonzero <- rref_ei[,k+1]!=0 #Tell whether any of the comparison values are non-zero
       if(max(nonzero)>0){ #If there are any non-zero comparisons
     	  	row1 <- max(which(nonzero==T)) #which row in the adjusted matrix contains the value comparison
@@ -331,7 +331,7 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
       ineq_marker <- ineq_marker + 1  
       r_i <- as.vector(r_i) #For pmvt must be a vector contrary to for dmvt.
 
-          if(rankMatrix(R_i)[[1]] == nrow(R_i)){ #If matrix rank is equal to number of rows do exact test.
+          if(Matrix::rankMatrix(R_i)[[1]] == nrow(R_i)){ #If matrix rank is equal to number of rows do exact test.
           	
           delta <- as.vector(R_i %*% betahat) #Posterior values we want to check
         	delta_zero <- as.vector(R_i %*% beta_zero) #Prior values.
@@ -375,7 +375,6 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
           	
           }
       
-      BFih[ineq_marker] <- h #gives which hypothesis amongst all the specified this one is NEW
       BFip_prior[ineq_marker] <- prior_prob #Saves the prior probability of hypothesis
       BFip_posterior[ineq_marker] <- posterior_prob #saves the posterior probability of hypothesis
       R_i_all[[ineq_marker]] <- R_i #save restriction matrices
@@ -447,7 +446,7 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
       K_2g1_prior <- as.vector((n*b - k + (t(matrix(r_e - w_1_prior)) %*% solve(K_11_prior) %*% matrix(r_e - w_1_prior))) / 
       		(n*b - k + q_e)) * (K_22_prior - K_21_prior %*% solve(K_11_prior) %*% t(K_21_prior)) #K_2 given theta1
       
-      if(rankMatrix(R_iv)[[1]] == nrow(R_iv)){ #If matrix rank is equal to number of rows do exact test 
+      if(Matrix::rankMatrix(R_iv)[[1]] == nrow(R_iv)){ #If matrix rank is equal to number of rows do exact test 
         r_iv <- as.vector(r_iv) #Necessary for pmvt
         
         delta_post <- as.vector(R_iv %*% w_2g1_post) #Transformed posterior mean vector 
@@ -481,58 +480,59 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
       
       } #end 'both comparisons' option
     
-    out_BF[h] <- BF #Output for each specified hypothesis
-    names(out_BF)[[h]] <- paste0("H", h) #names by number e.g. H1, H2 etc
+    BFu[h] <- BF #Output for each specified hypothesis vs. unconstrained
+    names(BFu)[[h]] <- paste0("H", h) #names by number e.g. H1, H2 etc
 
   } #end loop over all hypotheses
   
-  BFu <- out_BF #BF for hyp vs. unconstrained
-
-  if(!is.null(BFih)){ #NEW: Check if any "only inequality" hypotheses
-    if(length(BFih) == 1){ #If only 1 inequality only hypothesis
-     BFc <- (1 - BFip_posterior) / (1 - BFip_prior) #complementary hypothesis 
+  if(!is.null(BFip_posterior)){ #Check if any "only inequality" hypotheses
+    if(length(BFip_posterior) == 1){ #If only 1 inequality only hypothesis
+     BFc <- (1 - BFip_posterior) / (1 - BFip_prior) #BF complementary hypothesis vs. unconstrained
     } else{ 
-      R_i_overlap <- do.call(rbind, R_i_all)
+      R_i_overlap <- do.call(rbind, R_i_all) #for checking overlap
       r_i_overlap <- do.call(rbind, r_i_all)
       
       ineq_draws_prior <- rmvt(n = 1e4, delta = beta_zero, sigma = vcov(object) * (n - k) / (n*b - k), df = (n*b - k)) #Uses beta_zero from last hyp
-      overlap <- mean(apply(ineq_draws_prior%*%t(R_i_overlap) > rep(1, 1e4)%*%t(r_i_overlap), 1, prod)) #Check if there is a draw satisfying all constraints
-     
-     if(overlap == 0){ #if no overlap between hypotheses
-      BFc <-  (1 - sum(BFip_posterior)) / (1 - sum(BFip_prior))
-     } else{ #if overlapping hypotheses
-       ineq_draws_posterior <- rmvt(n = 1e4, delta = betahat, sigma = vcov(object), df = n - k) 
-       ineq_draws_prior <- rmvt(n = 1e4, delta = beta_zero, sigma = vcov(object) * (n - k) / (n*b - k), df = (n*b - k)) #Can be removed, only here for clarity
-
-       #Check whether all constraints are fulfilled for each hypothesis, returns list with 0/1s for each hypothesis
-       constraints_prior <- Map(function(Ri, ri){apply(ineq_draws_prior%*%t(Ri) > rep(1,1e4)%*%t(ri), 1, prod)}, R_i_all, r_i_all) #Check whether all constraints are fulfilled for each hypothesis
-       constraints_posterior <- Map(function(Ri, ri){apply(ineq_draws_posterior%*%t(Ri) > rep(1,1e4)%*%t(ri), 1, prod)}, R_i_all, r_i_all) 
-  
-       prob_prior <- mean(Reduce(`+`, constraints_prior) > 0) #sums whether each draw fulfilled constraints across hypotheses and checks proportion non-zero results
-       prob_posterior <- mean(Reduce(`+`, constraints_posterior) > 0) #same for posterior
-       BFc <- (1 - prob_posterior) / (1 - prob_prior) #BF for complement to all inequality only hypotheses vs. unconstrained
-     }
+      exhaustive <- mean(rowSums(ineq_draws_prior%*%t(R_i_overlap) > rep(1, 1e4)%*%t(r_i_overlap)) > 0) #checks if all draws fulfill some constraint
+      
+      if(exhaustive == 1){ #If specified hypotheses are exhaustive no complement is necessary
+        BFc <- NULL
+      } else{ #if not exhaustive
+        overlap <- mean(apply(ineq_draws_prior%*%t(R_i_overlap) > rep(1, 1e4)%*%t(r_i_overlap), 1, prod)) #Check if there is a draw satisfying all constraints
+        
+        if(overlap == 0){ #if no overlap between hypotheses
+          BFc <-  (1 - sum(BFip_posterior)) / (1 - sum(BFip_prior))
+        } else{ #if overlapping hypotheses
+          ineq_draws_posterior <- rmvt(n = 1e4, delta = betahat, sigma = vcov(object), df = n - k) 
+          
+          #Check whether all constraints are fulfilled for each hypothesis, returns list with 0/1s for each hypothesis
+          constraints_prior <- Map(function(Ri, ri){apply(ineq_draws_prior%*%t(Ri) > rep(1,1e4)%*%t(ri), 1, prod)}, R_i_all, r_i_all) #Check whether all constraints are fulfilled for each hypothesis
+          constraints_posterior <- Map(function(Ri, ri){apply(ineq_draws_posterior%*%t(Ri) > rep(1,1e4)%*%t(ri), 1, prod)}, R_i_all, r_i_all) 
+          
+          prob_prior <- mean(Reduce(`+`, constraints_prior) > 0) #sums whether each draw fulfilled constraints across hypotheses and checks proportion non-zero results
+          prob_posterior <- mean(Reduce(`+`, constraints_posterior) > 0) #same for posterior
+          BFc <- (1 - prob_posterior) / (1 - prob_prior) #BF for complement vs. unconstrained
+        }
+      }
     }
+  } else{ #If no inequality only hypotheses
+    BFc <- 1
+  }
+  
+  if(!is.null(BFc)){names(BFc) <- "Hc"} #Name if not null
+  BFu <- c(BFu, BFc) #all hypotheses (including complement if needed) against unconstrained
+  out_hyp_prob <- BFu / sum(BFu) #posterior probabilities for hypotheses. 
 
-    out_BF[BFih] <- out_BF[BFih] / BFc #Convert BFi vs. unconstrained into BFi vs. complement
-    } else{ #If no inequality only hypotheses
-      BFc <- 1
-    }
-  
-  out_hyp_prob <- c(BFu, BFc) / sum(BFu + BFc) #posterior probabilities for hypotheses. 
-  names(out_hyp_prob)[length(out_hyp_prob)] <- "Complement"
-  
   BF_matrix <- matrix(rep(BFu, length(BFu)), ncol = length(BFu), byrow = TRUE) #Create matrix with all BF
   BF_matrix <- BF_matrix / BFu #Compare hypotheses against each other
   colnames(BF_matrix) <- rownames(BF_matrix) <- names(BFu)
   
-  out <- list(BF_complement = out_BF, BF_matrix = BF_matrix, post_prob = out_hyp_prob, hypotheses = hyp)
+  out <- list(BF_matrix = BF_matrix, post_prob = out_hyp_prob, hypotheses = hyp)
   class(out) <- "hyp"
   out #final output
   
 }
 #End----
-
 
 #***************************************************
 #Testing the function----
@@ -543,8 +543,8 @@ object <- q #for testing subsections of the function
 
 hyp <- "X1 = X2, (X4, X5) > X6, X3 < -0.1; (X1, X4) = (0, X3)"
 hyp <- "X2 > X1 > 0; X2 < X1 > 0" 
-hyp <- "X2 > X1 > X5; X2 > X1 = X5"
+hyp <- "(X1,X2) > 0; (X1, X2) < 0; (X1, X2) = 0"
 
 hyp_test(q, hyp) #test hypotheses
-a <- hyp_test(q, hyp) #If saved as object can acces all output list-elements
+a <- hyp_test(q, hyp) #If saved as object can access all list-elements (primarily BFmatrix)
 
