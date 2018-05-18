@@ -311,7 +311,7 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
       #Scale matrix components, had to separate them to calculate RX
       X <- model.matrix(object) #X-values including intercept
       RX <- R_e %*% solve((t(X) %*% X)) %*% t(R_e) 
-      s2 <- sum((model.frame(object)$y - X %*% betahat)^2)
+      s2 <- sum((model.frame(object)[[1]] - X %*% betahat)^2)
       
       #Scale matrix for posterior t-distribution
       scale_post <- matrix(s2 * RX / (n - k), ncol = nrow(R_e)) #ncol = number of effects, needs to be in matrix for dmvt
@@ -339,7 +339,7 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
          	#Scale matrix components
         	X <- model.matrix(object) #X-values including intercept
         	RX <- R_i %*% solve(t(X) %*% X) %*% t(R_i) #Linear transformation
-        	s2 <- sum((model.frame(object)$y - X %*% betahat)^2) #sums of squares
+        	s2 <- sum((model.frame(object)[[1]] - X %*% betahat)^2) #sums of squares, first value is the 'y'-variable
         
         	#Scale matrix for posterior t-distribution
         	scale_post <- s2 * RX / (n - k) 
@@ -537,13 +537,16 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
 #***************************************************
 #Testing the function----
 #***************************************************
+#testing simulated data
 d <- sim_reg_data(c(0.2, 0.6, 0, 0.2, -0.2, 0.8))
 q <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6, data = d)
-object <- q #for testing subsections of the function
-
-hyp <- "X1 = X2, (X4, X5) > X6, X3 < -0.1; (X1, X4) = (0, X3)"
-hyp <- "X2 > X1 > 0; X2 < X1 > 0" 
+# object <- q #for testing subsections of the function
 hyp <- "(X1,X2) > 0; (X1, X2) < 0; (X1, X2) = 0"
+
+#test with real data
+dt <- as.data.frame(scale(mtcars[, c(1, 3:4, 6)]))
+q <- lm(mpg ~ wt + disp + hp, data = dt)
+hyp <- "wt < hp; wt > hp"
 
 hyp_test(q, hyp) #test hypotheses
 a <- hyp_test(q, hyp) #If saved as object can access all list-elements (primarily BFmatrix)
