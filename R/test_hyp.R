@@ -1,105 +1,80 @@
 
-#Informed hypotheses for regression
+#Informed hypothesis testing for regression
 #Script purpose: Function to examine complex hypothesis for lm objects with a minimal prior and BF as output
 #Code: Anton Ohlsson Collentine
-
-#Content----
-#a) Function to simulate regression data
-#b) print method
-#c) hypothesis testing function
-#d) code for trying out c)
-
-
-#*************************************
-#Function to simulate regression data----
-#*************************************
-sim_reg_data <- function(betas, intercept = 0,  sigma2 = 1, n = 100){
-  beta <- c(intercept, betas)
-  Xmat <- matrix(NA, nrow = n, ncol = length(beta)) #prepare the data matrix for predictors
-  Xmat[,1] <- 1 #intercept
-
-  #generate predictor data
-  Xmat[,-1] <- rnorm((length(beta)-1)*n)
-
-  #Generate error
-  error <- rnorm(n,sd=sqrt(sigma2))
-
-  #generate outcome variables as a linear function
-  #of the predictors
-  y <-  Xmat %*% beta + error #matrix multiplicaton
-
-  dat <- data.frame(Xmat, y) #Put into dataframe because lm function requires dataframe format
-  names(dat)[1:length(beta)] <- paste0("X", 0:(length(beta)-1)) #for clarity change names so that intercept is "X0"
-  dat
-}
-
-##Possible refinements: Allow to state means and SD of rnorm for data
-### If so, generate data with the follwing code: Xmat[-1,] <- rmvnorm(n,mean=c(1,2,3),sigma=diag(rep(1,3)))
-##possible refinement: Allow to specify distribution of data (for loop then becomes necessary)
-##Possible refinements: Other defaults?
-
-#*************************************
-#Print method----
-#*************************************
-#Determines printed output for an object of class "hyp"
-print.hyp <- function(x, ...){ #print method. Has to include the x and ...
-  cat("Hypotheses:")
-  cat("\n")
-  cat("\n")
-  for(h in seq_along(x$hypotheses)){
-    cat(paste0("  H", h, ":   ", '"', x$hypotheses[h], '"'))
-    cat("\n")
-  }
-  if(!(length(x$hypotheses) == length(x$post_prob))){ #If not exhaustive
-    if(length(x$hypotheses) == 1){cat('  Hc:   "Not H1"') #if only one hypotheses
-    } else{cat(paste0('  Hc:   "Not H1-H', length(x$hypotheses), '"'))
-    }
-    cat("\n")
-  }
-
-  cat("\n")
-  cat(paste0("Posterior probability of each hypothesis (rounded):"))
-  cat("\n")
-  cat("\n")
-  for(h in seq_along(x$hypotheses)){
-    cat(paste0("  H", h, ":   ", format(round(x$post_prob[h], digits = 4), nsmall = 4, scientific = FALSE)))
-    cat("\n")
-  }
-  if(!(length(x$hypotheses) == length(x$post_prob))){
-    cat(paste0("  Hc:   ", format(round(x$post_prob[length(x$post_prob)], digits = 4), nsmall = 4,  scientific = FALSE)))
-    }
-}
-#Appears that you simply include the print method in the package with something like S3method(print, hyp), should be fairly straightforward
-
 
 #*************************************
 #Hypothesis testing function----
 #*************************************
-#Requires mvtnorm
-# if(!require("mvtnorm")){install.packages("mvtnorm")}
-# library(mvtnorm)
-#reqires Matrix for function 'rankMatrix' for choice between mvtnorm::pmvt and montecarlo in only inequality option
-# if(!require("Matrix")){install.packages("Matrix")}
-# library(Matrix)
-# if(!require("pracma")){install.packages("pracma")} #for function rref (reduced row echelon)
-# library(pracma)
-# if(!require("MASS")){install.packages("MASS")} #for function MASS::ginv (general inverse)
-# library(MASS)
 
+#'Testing Informed Hypotheses
+#'
+#'Test hypotheses about continous predictors in an \code{\link{lm}}-object.
+#'
+#'This function is based on a method by Mulder (2014), a modification of the
+#'fractional Bayes factor approach. In essence, it uses a number of observations
+#'equal to the number of predictors in the \code{lm} model to construct a
+#'minimally informative prior, and the remainder of the observations are then
+#'used to test the hypotheses.
+#'
+#'The function requires that relevant variables have been standardized before
+#'fitting the model with \code{lm}. This is done simply by substracting the mean
+#'of a variable from each observation and dividing by the standard deviation. A
+#'simple option for achieving this is to use the \code{\link{scale}} function.
+#'
+#'Multiple hypotheses can be specified at the same time by separating them with
+#'a semicolon. It is advisable to only specify competing hypotheses in this way,
+#'that is, hypotheses regarding the same variables, e.g., \dQuote{X1 > 0; X1 <
+#'0; X1 = 0}. If specifying multiple hypotheses and comparing against a value it
+#'is currently only possible to compare against the same value, e.g., \dQuote{X1
+#'= 0; X1 = 2} is not functional input. This is because the prior is centered
+#'around the input value (or zero if no input value), which is not possible in
+#'the case of several input values.
+#'
+#'Parentheses can be used to compare multiple variables with the same variable
+#'or value. For example, \dQuote{(X1, X2) > X3} is read as \dQuote{X1 > X3 and
+#'X2 > X3}.
+#'
+#'For each specified hypothesis the posterior probability is output. If the
+#'hypotheses are not mutually exhaustive this includes the posterior probability
+#'of the complement to the input hypotheses. For example, inputting \dQuote{X1 >
+#'0; X1 < 0} gives posterior probabilities for only for these hypotheses,
+#'whereas inputting \dQuote{(X1, X2) > 0} gives posterior probabilities for
+#'\dQuote{(X1, X2) > 0} and \dQuote{not (X1, X2) > 0}.
+#'
+#'By saving the test as an object it is also possible to access the
+#'\code{BF_matrix} which compares the hypotheses directly against each other
+#'(see examples). This matrix divides the column hypothesis by each row
+#'hypothesis and can be interpreted as \dQuote{given the data, [column
+#'hypothesis] is [value] times as likely as [row hypothesis]}.
+#'
+#'@section References: Mulder, J. (2014). Prior adjusted default Bayes factors
+#'  for testing (in) equality constrained hypotheses. Computational Statistics &
+#'  Data Analysis, 71, 448-463.
+#'
+#'@examples
+#'###Standardize variables and fit the linear model
+#'dt <- as.data.frame(scale(mtcars[, c(1, 3:4, 6)]))
+#'fit <- lm(mpg ~ disp + hp + wt, data = dt)
+#'
+#'###Define hypotheses based on theory and test them
+#'hyp <- "(wt, hp) > disp > 0; (wt, hp) > disp = 0"
+#'res <- test_hyp(fit, hyp)
+#'res
+#'
+#'###Examine output that compares hypotheses directly with Bayes factors
+#'res$BF_matrix
+#'
+#'@param object A regression model object fit using the \code{lm} function.
+#'@param hyp A string specifying hypotheses to be tested using the variable
+#'  names of the \code{lm} object.
+#'@param mcrep Integer specifying the number of iterations if no analytical
+#'  solutions is possible. This is rare and only the case if the rank of the
+#'  constraint matrix is less than its number of rows.
+#'
+#'@export test_hyp
 
-#Parts of function
-#1) Initial setup and checks
-#2) convert input into matrices, [gives warnings if hypothesis input improperly]
-#3) Check which (if any) of the constraints matrices are NULL and choose computation option based on that
-#**3.1) Only equality comparisons
-#**3.2) Only inequality comparisons
-#**3.3) both
-#4) If any 'only inequality' hypotheses update their BF from vs. unconstrained to vs. complement
-#END
-
-#Note: If several hypotheses specified in input (separated by semicolons) function loops over parts 2-3 for each hypothesis
-
-hyp_test <- function(object, hyp, mcrep = 1e6){
+test_hyp <- function(object, hyp, mcrep = 1e6){
 
   #1) initial setup and checks of input----
   varnames <- variable.names(object) #provides the variable names of the object, including intercept
@@ -339,7 +314,7 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
          	#Scale matrix components
         	X <- model.matrix(object) #X-values including intercept
         	RX <- R_i %*% solve(t(X) %*% X) %*% t(R_i) #Linear transformation
-        	s2 <- sum((model.frame(object)[[1]] - X %*% betahat)^2) #sums of squares, first value is the 'y'-variable
+        	s2 <- sum((model.frame(object)[[1]] - X %*% betahat)^2) #sums of squares
 
         	#Scale matrix for posterior t-distribution
         	scale_post <- s2 * RX / (n - k)
@@ -533,21 +508,3 @@ hyp_test <- function(object, hyp, mcrep = 1e6){
 
 }
 #End----
-
-#***************************************************
-#Testing the function----
-#***************************************************
-#testing simulated data
-d <- sim_reg_data(c(0.2, 0.6, 0, 0.2, -0.2, 0.8))
-q <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6, data = d)
-# object <- q #for testing subsections of the function
-hyp <- "(X1,X2) > 0; (X1, X2) < 0; (X1, X2) = 0"
-
-#test with real data
-dt <- as.data.frame(scale(mtcars[, c(1, 3:4, 6)]))
-q <- lm(mpg ~ wt + disp + hp, data = dt)
-hyp <- "wt < hp; wt > hp"
-
-hyp_test(q, hyp) #test hypotheses
-a <- hyp_test(q, hyp) #If saved as object can access all list-elements (primarily BFmatrix)
-
