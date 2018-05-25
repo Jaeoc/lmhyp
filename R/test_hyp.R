@@ -442,11 +442,11 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
           if(!is.numeric(mcrep) || !mcrep %% 1 == 0) stop("Input for mcrep should be an integer")
 
           #Draw from prior and posterior
-          draws_post <- mvtnorm::rmvt(n = mcrep, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e) #posterior draws
-          draws_prior <- mvtnorm::rmvt(n = mcrep, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e) #prior draws
+          draws_post <- mvtnorm::rmvt(n = mcrep, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e)
+          draws_prior <- mvtnorm::rmvt(n = mcrep, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e)
 
           BFi <- mean(apply(draws_post%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod)) /
-          		mean(apply(draws_prior%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod))
+            mean(apply(draws_prior%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod))
 
         }
 
