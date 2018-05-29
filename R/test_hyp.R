@@ -33,7 +33,7 @@
 #'
 #'Parentheses can be used to compare multiple variables with the same variable
 #'or value. For example, \dQuote{(X1, X2) > X3} is read as \dQuote{X1 > X3 and
-#'X2 > X3}.
+#'X2 > X3}. Each variable should only be specified once in a single hypothesis.
 #'
 #'For each specified hypothesis the posterior probability is output. If the
 #'hypotheses are not mutually exhaustive this includes the posterior probability
@@ -108,6 +108,9 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
 
   for(h in seq_along(hyps)){
     hyp2 <- hyps[[h]]
+    step2 <- unlist(strsplit(hyp2, split = "[<>=,()]"))
+    hyp_vars <- step2[grep("[a-zA-Z]+", step2)]
+    if(any(duplicated(hyp_vars))) stop("Variables should occur only once in a hypothesis. Check semicolons.")
 
     #2)hyp-to-matrices----
     framer <- function(x){
