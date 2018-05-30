@@ -44,6 +44,8 @@ devtools::install_github("Jaeoc/lmhyp")
 Usage
 -----
 
+This function is based on a Bayes factor method by Mulder (2014). In essence, it uses a number of observations equal to the number of predictors in the linear model to construct a minimally informative prior, and the remainder of the observations are then used to test the hypotheses.
+
 The function `test_hyp` takes as primary input a linear model object and a string vector specifying hypotheses. Simply specify the linear model as you normally would in R using `lm`, although for interpretation purposes it is preferable to standardize variables first.
 
 ``` r
@@ -108,9 +110,14 @@ We see that there is strong evidence in the data for H1 and very weak evidence f
 ``` r
 result$BF_matrix
 #>          H1          H2          Hc
-#> H1   1.0000 0.002806411 0.006004414
-#> H2 356.3271 1.000000000 2.139535126
-#> Hc 166.5441 0.467391252 1.000000000
+#> H1   1.0000 0.002810388 0.006015186
+#> H2 355.8227 1.000000000 2.140339800
+#> Hc 166.2459 0.467215533 1.000000000
 ```
 
-Here we see that, given the data, H1 is 356 times as likely as H2 (BF = 356.33) and 167 times as likely as the complement (BF = 166.54).
+Here we see that, given the data, H1 is 356 times as likely as H2 (BF = 355.82) and 166 times as likely as the complement (BF = 166.25).
+
+References
+----------
+
+Mulder, J. (2014). Prior adjusted default Bayes factors for testing (in) equality constrained hypotheses. Computational Statistics & Data Analysis, 71, 448-463.
