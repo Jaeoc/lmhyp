@@ -62,13 +62,13 @@ When comparing several variables with the same value or variable they can be gro
 Hyp <- "(wt, disp) < 0"
 ```
 
-Parentheses becomes more important when defining hypotheses that involve more variables. For example, if we think that `hp` also has a negative association with the DV, but that the strenght of association is larger for `wt` than for either of the other variables, it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This relationship would be then be specified as follows:
+Parentheses becomes more important when defining hypotheses that involve more variables. For example, if we think that `hp` also has a negative association with the DV, but that the association is more negative for `wt` than for either of the other variables, it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This relationship would be then be specified as follows:
 
 ``` r
 H1 <- "wt < (disp, hp) < 0"
 ```
 
-If we have several contradicting hypotheses, as in the basic example, we can compare these directly by including them all in the same string vector separated with semicolons. For example, an alternative hypothesis might be that `wt` has a positive association, but that `disp` and `hp` have no association with the DV:
+If we have several contradicting hypotheses, as in the basic example, we can compare these directly by including them all in the same string vector separated with semicolons. For example, an alternative hypothesis might be that `wt` has a negative association, but that `disp` and `hp` have no association with the DV:
 
 ``` r
 H2 <- "wt < (disp, hp) = 0"
@@ -100,17 +100,17 @@ result
 #> 
 #>   H1:   0.9913
 #>   H2:   0.0028
-#>   Hc:   0.0059
+#>   Hc:   0.0060
 ```
 
 We see that there is strong evidence in the data for H1 and very weak evidence for H2 and the complement Hc. Exactly how the hypotheses compare to each other we can find out by printing the Bayes factor matrix:
 
 ``` r
 result$BF_matrix
-#>          H1          H2         Hc
-#> H1   1.0000 0.002789462 0.00597162
-#> H2 358.4920 1.000000000 2.14077803
-#> Hc 167.4588 0.467119892 1.00000000
+#>          H1          H2          Hc
+#> H1   1.0000 0.002806411 0.006004414
+#> H2 356.3271 1.000000000 2.139535126
+#> Hc 166.5441 0.467391252 1.000000000
 ```
 
-Here we see that, given the data, H1 is 358 times as likely as H2 (BF = 358.49) and 167 times as likely as the complement (BF = 167.46).
+Here we see that, given the data, H1 is 356 times as likely as H2 (BF = 356.33) and 167 times as likely as the complement (BF = 166.54).

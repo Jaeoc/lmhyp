@@ -60,13 +60,13 @@ When comparing several variables with the same value or variable they can be gro
 Hyp <- "(wt, disp) < 0"
 ```
 
-Parentheses becomes more important when defining hypotheses that involve more variables. For example, if we think that `hp` also has a negative association with the DV, but that the strenght of association is larger for `wt` than for either of the other variables, it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This relationship would be then be specified as follows:
+Parentheses becomes more important when defining hypotheses that involve more variables. For example, if we think that `hp` also has a negative association with the DV, but that the association is more negative for `wt` than for either of the other variables, it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This relationship would be then be specified as follows:
 
 ```{r, eval = FALSE}
 H1 <- "wt < (disp, hp) < 0"
 ```
 
-If we have several contradicting hypotheses, as in the basic example, we can compare these directly by including them all in the same string vector separated with semicolons. For example, an alternative hypothesis might be that `wt` has a positive association, but that `disp` and `hp` have no association with the DV:
+If we have several contradicting hypotheses, as in the basic example, we can compare these directly by including them all in the same string vector separated with semicolons. For example, an alternative hypothesis might be that `wt` has a negative association, but that `disp` and `hp` have no association with the DV:
 
 ```{r, eval = FALSE}
 H2 <- "wt < (disp, hp) = 0"
