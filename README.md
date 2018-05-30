@@ -3,7 +3,7 @@
 lmhyp
 =====
 
-This package provides an easy way to test hypotheses about continous predictors in multiple regression. A hypothesis may for example be that variable1 and variable2 both have a positive correlation with the outcome variable, but that the correlation of variable1 is stronger. This package enables formal testing of such hypotheses and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is forthcoming.
+This package provides an easy way to test hypotheses about continuous predictors in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is forthcoming.
 
 Basic example
 -------------
@@ -11,11 +11,11 @@ Basic example
 ``` r
 library(lmhyp)
 
-###Standardize variables and fit a linear model with lm
+###Fit a linear model with lm
 dt <- as.data.frame(scale(mtcars[, c(1, 3:4, 6)]))
 fit <- lm(mpg ~ disp + hp + wt, data = dt)
 
-###Define hypotheses based on theory and test them
+###Define hypotheses and test them
 hyp <- "wt > disp; wt < disp; wt = disp"
 test_hyp(fit, hyp)
 #> Hypotheses:
@@ -64,7 +64,7 @@ When comparing several variables with the same value or variable they can be gro
 Hyp <- "(wt, disp) < 0"
 ```
 
-Parentheses becomes more important when defining hypotheses that involve more variables. For example, if we think that `hp` also has a negative association with the DV, but that the association is more negative for `wt` than for either of the other variables, it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This relationship would be then be specified as follows:
+Parentheses become more important when defining hypotheses that involve more variables. For example, a hypothesis might be that the third variable `hp` also has a negative association with the DV, but that `wt` has a stronger negative association than either of the other variables. In tht case it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This hypothesis would be then be specified as follows:
 
 ``` r
 H1 <- "wt < (disp, hp) < 0"
@@ -88,7 +88,9 @@ Testing the hypotheses is then as simple as inputting the `lm` object and hypoth
 result <- test_hyp(fit, H1v2)
 ```
 
-When specified hypotheses are overlapping as in this case (in both hypotheses wt &lt; 0) the function takes slightly longer to run since it runs 1e4 Monte Carlo iterations to check the extent of overlap. The function gives as output which hypotheses were specified and the posterior probability of each hypothesis. If the input hypotheses are not exhaustive (i.e., do not cover the full parameter space), the posterior probability of the complement is also output. The complement is the hypothesis that neither of the input hypotheses is true. In the current case we get the following output:
+When specified hypotheses are overlapping as in this case (in both hypotheses wt &lt; 0) the function takes slightly longer to finish since it runs 1e4 Monte Carlo iterations to check the extent of the overlap.
+
+The function gives as output which hypotheses were specified and the posterior probability of each hypothesis. If the input hypotheses are not exhaustive (i.e., do not cover the full parameter space), the posterior probability of the complement is also output. The complement is the hypothesis that neither of the input hypotheses is true. In the current case we get the following output:
 
 ``` r
 result
@@ -110,12 +112,12 @@ We see that there is strong evidence in the data for H1 and very weak evidence f
 ``` r
 result$BF_matrix
 #>          H1          H2          Hc
-#> H1   1.0000 0.002810388 0.006015186
-#> H2 355.8227 1.000000000 2.140339800
-#> Hc 166.2459 0.467215533 1.000000000
+#> H1   1.0000 0.002806787 0.006010923
+#> H2 356.2792 1.000000000 2.141567123
+#> Hc 166.3638 0.466947774 1.000000000
 ```
 
-Here we see that, given the data, H1 is 356 times as likely as H2 (BF = 355.82) and 166 times as likely as the complement (BF = 166.25).
+Here we see that, given the data, H1 is 356 times as likely as H2 (BF = 356.28) and 166 times as likely as the complement (BF = 166.36).
 
 References
 ----------

@@ -8,12 +8,11 @@ Authors@R: c(
 URL: http://github.com/jaeoc/lmhyp
 BugReports: https://github.com/jaeoc/lmhyp/issues
 Description: This package provides an easy way to test hypotheses 
-    about continous predictors in multiple regression. A hypothesis
-	may for example be that variable1 and variable2 both have a 
-	positive correlation with the outcome variable, but that the 
-	correlation of variable1 is stronger. This package enables 
-	formal testing of such hypotheses and is particularly useful
-	for testing multiple contradicting hypotheses.
+    about continuous predictors in multiple regression. Simply fit
+	a linear model in R with `lm`, specify your hypotheses and test
+	them with `test_hyp`. The package enables formal testing of
+	hypotheses using a default Bayesian prior and is particularly
+	useful for testing multiple contradicting hypotheses.
 License: >= GPL-3
 Encoding: UTF-8
 LazyData: true
