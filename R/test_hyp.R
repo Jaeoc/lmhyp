@@ -17,10 +17,10 @@
 #'minimally informative prior, and the remainder of the observations are then
 #'used to test the hypotheses.
 #'
-#'The function requires that relevant variables have been standardized before
-#'fitting the model with \code{lm}. This is done simply by substracting the mean
-#'of a variable from each observation and dividing by the standard deviation. A
-#'simple option for achieving this is to use the \code{\link{scale}} function.
+#'It is advisable to standardize relevant variables before fitting the model
+#'with \code{lm}. This is done simply by substracting the mean of a variable
+#'from each observation and dividing by the standard deviation. A simple option
+#'for achieving this is to use the \code{\link{scale}} function.
 #'
 #'Multiple hypotheses can be specified at the same time by separating them with
 #'a semicolon. It is advisable to only specify competing hypotheses in this way,
@@ -36,11 +36,13 @@
 #'X2 > X3}. Each variable should only be specified once in a single hypothesis.
 #'
 #'For each specified hypothesis the posterior probability is output. If the
-#'hypotheses are not mutually exhaustive this includes the posterior probability
-#'of the complement to the input hypotheses. For example, inputting \dQuote{X1 >
-#'0; X1 < 0} gives posterior probabilities for only for these hypotheses,
-#'whereas inputting \dQuote{(X1, X2) > 0} gives posterior probabilities for
-#'\dQuote{(X1, X2) > 0} and \dQuote{not (X1, X2) > 0}.
+#'hypotheses are not exhaustive (i.e., do not cover the entire parameter space)
+#'this includes the posterior probability of the complement to the input
+#'hypotheses. The complement is the hypothesis that neither of the input
+#'hypotheses is true. For example, inputting \dQuote{X1 > 0; X1 < 0} gives
+#'posterior probabilities for only for these hypotheses, whereas inputting
+#'\dQuote{(X1, X2) > 0} gives posterior probabilities for \dQuote{(X1, X2) > 0}
+#'and \dQuote{not (X1, X2) > 0}.
 #'
 #'By saving the test as an object it is also possible to access the
 #'\code{BF_matrix} which compares the hypotheses directly against each other
