@@ -62,7 +62,7 @@ When comparing several variables with the same value or variable they can be gro
 Hyp <- "(wt, disp) < 0"
 ```
 
-Parentheses become more important when defining hypotheses that involve more variables. For example, a hypothesis might be that the third variable `hp` also has a negative association with the DV, but that `wt` has a stronger negative association than either of the other variables. In tht case it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This hypothesis would be then be specified as follows:
+Parentheses become more important when defining hypotheses that involve more variables. For example, a hypothesis might be that the third variable `hp` also has a negative association with the DV, but that `wt` has a stronger negative association than either of the other variables. In that case it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This hypothesis would be then be specified as follows:
 
 ```{r, eval = FALSE}
 H1 <- "wt < (disp, hp) < 0"
@@ -100,7 +100,7 @@ We see that there is strong evidence in the data for H1 and very weak evidence f
 result$BF_matrix
 ```
 
-Here we see that, given the data, H1 is `r round(result$BF_matrix[2, 1], 0)` times as likely as H2 (BF = `r round(result$BF_matrix[2, 1], 2)`) and `r round(result$BF_matrix[3, 1], 0)` times as likely as the complement (BF = `r round(result$BF_matrix[3, 1], 2)`). 
+By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is `r round(result$BF_matrix[2, 1], 0)` times as likely as H2 (BF = `r round(result$BF_matrix[2, 1], 2)`) and `r round(result$BF_matrix[3, 1], 0)` times as likely as the complement (BF = `r round(result$BF_matrix[3, 1], 2)`). 
 
 ## References
 Mulder, J. (2014). Prior adjusted default Bayes factors for testing (in) equality constrained hypotheses. Computational Statistics & Data Analysis, 71, 448-463.

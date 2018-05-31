@@ -64,7 +64,7 @@ When comparing several variables with the same value or variable they can be gro
 Hyp <- "(wt, disp) < 0"
 ```
 
-Parentheses become more important when defining hypotheses that involve more variables. For example, a hypothesis might be that the third variable `hp` also has a negative association with the DV, but that `wt` has a stronger negative association than either of the other variables. In tht case it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This hypothesis would be then be specified as follows:
+Parentheses become more important when defining hypotheses that involve more variables. For example, a hypothesis might be that the third variable `hp` also has a negative association with the DV, but that `wt` has a stronger negative association than either of the other variables. In that case it becomes necessary to use parentheses because the function does not permit repeating variables when specifying a hypothesis. This hypothesis would be then be specified as follows:
 
 ``` r
 H1 <- "wt < (disp, hp) < 0"
@@ -102,9 +102,9 @@ result
 #> 
 #> Posterior probability of each hypothesis (rounded):
 #> 
-#>   H1:   0.9913
-#>   H2:   0.0028
-#>   Hc:   0.0060
+#>   H1:   0.9915
+#>   H2:   0.0027
+#>   Hc:   0.0058
 ```
 
 We see that there is strong evidence in the data for H1 and very weak evidence for H2 and the complement Hc. Exactly how the hypotheses compare to each other we can find out by printing the Bayes factor matrix:
@@ -112,12 +112,12 @@ We see that there is strong evidence in the data for H1 and very weak evidence f
 ``` r
 result$BF_matrix
 #>          H1          H2          Hc
-#> H1   1.0000 0.002806787 0.006010923
-#> H2 356.2792 1.000000000 2.141567123
-#> Hc 166.3638 0.466947774 1.000000000
+#> H1   1.0000 0.002741001 0.005866392
+#> H2 364.8302 1.000000000 2.140237177
+#> Hc 170.4625 0.467237935 1.000000000
 ```
 
-Here we see that, given the data, H1 is 356 times as likely as H2 (BF = 356.28) and 166 times as likely as the complement (BF = 166.36).
+By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is 365 times as likely as H2 (BF = 364.83) and 170 times as likely as the complement (BF = 170.46).
 
 References
 ----------
