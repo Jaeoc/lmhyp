@@ -246,9 +246,14 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
     for(i in seq_along(r_i)){
       if(!all(var_locations[i, ] > 0)){
 
-        value <- if(i %in% leq) -1 else 1
-        R_i[i, var_locations[i,]] <- value
-
+        if(var_locations[i, 1] == 0){ 
+          value <- if(i %in% leq) 1 else -1 
+        } else{ 
+          value <- if(i %in% leq) -1 else 1 
+        }
+        
+        R_i[i, var_locations[i,]] <- value #Set this variable to 1/-1 in R_i row i
+        
       } else{
         value <- if(i %in% leq) c(-1, 1) else c(1, -1)
         R_i[i, var_locations[i,]] <- value
