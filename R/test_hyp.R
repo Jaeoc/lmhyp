@@ -1,5 +1,5 @@
 
-#Informed hypothesis testing for regression
+#Project: lmhyp - Informed hypothesis testing for regression
 #Script purpose: Function to examine complex hypothesis for lm objects with a minimal prior and BF as output
 #Code: Anton Ohlsson Collentine
 
@@ -511,7 +511,8 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
   BF_matrix <- BF_matrix / BFu
   colnames(BF_matrix) <- rownames(BF_matrix) <- names(BFu)
 
-  out <- list(BF_matrix = BF_matrix, post_prob = out_hyp_prob, hypotheses = hyp)
+  out <- list(BF_matrix_rounded = round(BF_matrix, digits = 3), BF_matrix_unrounded = BF_matrix,
+              post_prob = out_hyp_prob, hypotheses = hyp)
   class(out) <- "hyp"
   out
 

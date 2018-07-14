@@ -30,11 +30,11 @@ print.hyp <- function(x, ...){ #print method. Has to include the x and ...
   cat("\n")
   cat("\n")
   for(h in seq_along(x$hypotheses)){
-    cat(paste0("  H", h, ":   ", format(round(x$post_prob[h], digits = 4), nsmall = 4, scientific = FALSE)))
+    cat(paste0("  H", h, ":   ", format(round(x$post_prob[h], digits = 3), nsmall = 3, scientific = FALSE)))
     cat("\n")
   }
   if(!(length(x$hypotheses) == length(x$post_prob))){
-    cat(paste0("  Hc:   ", format(round(x$post_prob[length(x$post_prob)], digits = 4), nsmall = 4,  scientific = FALSE)))
+    cat(paste0("  Hc:   ", format(round(x$post_prob[length(x$post_prob)], digits = 3), nsmall = 3,  scientific = FALSE)))
   }
 }
 
