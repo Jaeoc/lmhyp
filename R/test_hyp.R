@@ -247,12 +247,22 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
       if(!all(var_locations[i, ] > 0)){
 
         if(var_locations[i, 1] == 0){ 
-          value <- if(i %in% leq) 1 else -1 
+          if(i %in% leq){
+            value <-  1  
+          } else{ 
+            r_i[i] <- r_i[i]*-1 
+            value <- -1 
+          }
         } else{ 
-          value <- if(i %in% leq) -1 else 1 
+          if(i %in% leq){ 
+            r_i[i] <- r_i[i]*-1 
+            value <-  -1  
+          } else{
+            value <- 1 
+          }
         }
         
-        R_i[i, var_locations[i,]] <- value #Set this variable to 1/-1 in R_i row i
+        R_i[i, var_locations[i,]] <- value 
         
       } else{
         value <- if(i %in% leq) c(-1, 1) else c(1, -1)

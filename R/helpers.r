@@ -210,9 +210,19 @@ create_matrices <- function(object, hyp){
       if(!all(var_locations[i, ] > 0)){ #If only one variable is specified (i.e., other one is set to zero)
 
         if(var_locations[i, 1] == 0){ #If first value is not the variable (i.e, a comparison value)
-          value <- if(i %in% leq) 1 else -1 #If comparison is 'lesser or equal' set to 1, if 'larger or equal' set to -1
-        } else{ #If first value is the variable (i.e., the second is a comparison value
-          value <- if(i %in% leq) -1 else 1 #If comparison is 'lesser or equal' set to -1, if 'larger or equal' set to 1
+          if(i %in% leq){#Then if comparison is 'lesser or equal' 
+            value <-  1  #set variable value to 1
+          } else{ #else if comparison 'larger or equal'
+            r_i[i] <- r_i[i]*-1 #invert comparison value
+            value <- -1 # set variable value to -1
+          }
+        } else{ #If first value is the variable (i.e., the second is a comparison value)
+          if(i %in% leq){ #then if comparison is 'lesser or equal'
+            r_i[i] <- r_i[i]*-1 #invert comparison value
+            value <-  -1  #set variable value to -1
+          } else{
+            value <- 1 #else if comparison 'larger or equal' set to 1
+          }
         }
         
         R_i[i, var_locations[i,]] <- value #Set this variable to 1/-1 in R_i row i
