@@ -391,8 +391,7 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
 
       #a)Transformation matrix
       D <- diag(k) - t(R_e) %*% solve(R_e %*% t(R_e)) %*% R_e
-      mode(D) <- "integer"
-      D2 <- unique(D)
+      D2 <- unique(round(D, 5))
       D2 <- D2[as.logical(rowSums(D2 != 0)),]
       Tm <- rbind(R_e, D2)
 
