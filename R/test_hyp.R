@@ -518,7 +518,7 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
   out_hyp_prob <- BFu / sum(BFu)
 
   BF_matrix <- matrix(rep(BFu, length(BFu)), ncol = length(BFu), byrow = TRUE)
-  BF_matrix <- BF_matrix / BFu
+  BF_matrix <- t(BF_matrix / BFu)
   colnames(BF_matrix) <- rownames(BF_matrix) <- names(BFu)
 
   out <- list(BF_matrix_rounded = round(BF_matrix, digits = 3), BF_matrix_unrounded = BF_matrix,
