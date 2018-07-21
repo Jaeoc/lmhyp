@@ -76,7 +76,7 @@
 #'
 #'@export test_hyp
 
-test_hyp <- function(object, hyp, mcrep = 1e6){
+test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
 
   #1) initial setup and checks of input----
   varnames <- variable.names(object)
@@ -96,6 +96,7 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
   if(!all(input_vars %in% varnames)) stop("Hypothesis variable(s) not in object, check spelling")
 
   hyp <- unlist(strsplit(hyp2, split = ";"))
+  if(!priorprob == 1 && length(priorprob) < length(hyp)) stop("Use default equal priorprob or specify priorprob for all hypotheses")
   for(no in seq_along(hyp)){names(hyp)[no] <- paste0("H", no)}
   hyps <- unlist(strsplit(hyp2, split = ";"))
   BFu <- rep(NA, length = length(hyps))
@@ -515,7 +516,14 @@ test_hyp <- function(object, hyp, mcrep = 1e6){
 
   if(!is.null(BFc)){names(BFc) <- "Hc"}
   BFu <- c(BFu, BFc)
-  out_hyp_prob <- BFu / sum(BFu)
+  if(!priorprob == 1 && !is.null(BFc) && length(BFu) > length(priorprob)) stop("Hypotheses have complement, add priorprob for it or use equal priorprobs.")
+  if(length(priorprob) > length(BFu)) stop("Too many priorprobs specified")
+  if(!sum(priorprob) == 1){ 
+    priorprob <- priorprob / sum(priorprob)
+    warning(paste(c("priorprobs did not sum to 1 and have been normalized. Used priorprobs: ",
+                    round(priorprob, 4)), collapse = " "))
+  }
+  out_hyp_prob <- BFu*priorprob / sum(BFu*priorprob)
 
   BF_matrix <- matrix(rep(BFu, length(BFu)), ncol = length(BFu), byrow = TRUE)
   BF_matrix <- t(BF_matrix / BFu)
