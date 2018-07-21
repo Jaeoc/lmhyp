@@ -11,33 +11,50 @@
 #'@export
 #'
 print.hyp <- function(x, ...){ #print method. Has to include the x and ...
-  cat("Hypotheses:")
-  cat("\n")
-  cat("\n")
-  for(h in seq_along(x$hypotheses)){
-    cat(paste0("  H", h, ":   ", '"', x$hypotheses[h], '"'))
+  
+  if(!is.matrix(x$post_prob)){
+    cat("Hypotheses:")
     cat("\n")
-  }
-  if(!(length(x$hypotheses) == length(x$post_prob))){ #If not exhaustive
-    if(length(x$hypotheses) == 1){cat('  Hc:   "Not H1"') #if only one hypotheses
-    } else{cat(paste0('  Hc:   "Not H1-H', length(x$hypotheses), '"'))
+    cat("\n")
+    for(h in seq_along(x$hypotheses)){
+      cat(paste0("  H", h, ":   ", '"', x$hypotheses[h], '"'))
+      cat("\n")
+    }
+    if(!(length(x$hypotheses) == length(x$post_prob))){ #If not exhaustive
+      if(length(x$hypotheses) == 1){cat('  Hc:   "Not H1"') #if only one hypotheses
+      } else{cat(paste0('  Hc:   "Not H1-H', length(x$hypotheses), '"'))
+      }
+      cat("\n")
+    }
+    
+    cat("\n")
+    cat(paste0("Posterior probability of each hypothesis (rounded):"))
+    cat("\n")
+    cat("\n")
+    for(h in seq_along(x$hypotheses)){
+      cat(paste0("  H", h, ":   ", format(round(x$post_prob[h], digits = 3), nsmall = 3, scientific = FALSE)))
+      cat("\n")
+    }
+    if(!(length(x$hypotheses) == length(x$post_prob))){
+      cat(paste0("  Hc:   ", format(round(x$post_prob[length(x$post_prob)], digits = 3), nsmall = 3,  scientific = FALSE)))
+    }
+  } else{
+    
+    cat("Exploratory hypotheses:")
+    cat("\n")
+    cat("\n")
+    for(h in seq_along(x$hypotheses)){
+      cat(paste0("  H", h, ":   ", '"', x$hypotheses[h], '"'))
+      cat("\n")
     }
     cat("\n")
-  }
-
-  cat("\n")
-  cat(paste0("Posterior probability of each hypothesis (rounded):"))
-  cat("\n")
-  cat("\n")
-  for(h in seq_along(x$hypotheses)){
-    cat(paste0("  H", h, ":   ", format(round(x$post_prob[h], digits = 3), nsmall = 3, scientific = FALSE)))
+    cat(paste0("Posterior probabilities for each variable (rounded):"))
     cat("\n")
-  }
-  if(!(length(x$hypotheses) == length(x$post_prob))){
-    cat(paste0("  Hc:   ", format(round(x$post_prob[length(x$post_prob)], digits = 3), nsmall = 3,  scientific = FALSE)))
+    cat("\n")
+    mat_out <- as.data.frame(format(round(x$post_prob, digits = 3), scientific = FALSE))
+    print(mat_out)
   }
 }
-
 #*************************************
 #Function to simulate regression data----
 #*************************************
