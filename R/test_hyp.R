@@ -529,7 +529,7 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
   BF_matrix <- t(BF_matrix / BFu)
   colnames(BF_matrix) <- rownames(BF_matrix) <- names(BFu)
 
-  out <- list(BF_matrix_rounded = round(BF_matrix, digits = 3), BF_matrix_unrounded = BF_matrix,
+  out <- list(BF_matrix = round(BF_matrix, digits = 3),
               post_prob = out_hyp_prob, hypotheses = hyp)
   class(out) <- "hyp"
   out
