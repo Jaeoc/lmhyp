@@ -105,7 +105,7 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
   
   for(loop in seq_along(hyp)){ #If 'exploratory' option loop over all variables, else specified hyp
     
-    hyp2 <- gsub(" ", "", hyp[[loop]])
+    hyp2 <- gsub("[ \n]", "", hyp[[loop]])
     if(!grepl("^[0-9a-zA-Z><=,;().-]+$", hyp2)) stop("Impermissable characters in hypotheses.")
     if(grepl("[><=]{2,}", hyp2)) stop("Do not use combined comparison signs e.g., '>=' or '=='")
     

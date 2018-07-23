@@ -86,7 +86,7 @@ create_matrices <- function(object, hyp){
   varnames <- variable.names(object) #provides the variable names of the linear model object, including intercept
   if(is.null(varnames)) stop("Please input proper linear model object")
 
-  hyp2 <- gsub(" ", "", hyp) #removes all whitespace
+  hyp2 <- gsub("[ \n]", "", hyp) #removes all whitespace
   if(!grepl("^[0-9a-zA-Z><=,().-]+$", hyp2)) stop("Impermissable characters in hypotheses") #Self-explanatory. NEW parentehese
   if(grepl("[><=]{2,}", hyp2)) stop("Do not use combined comparison signs e.g., '>=' or '=='")
 
