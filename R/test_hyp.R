@@ -81,6 +81,7 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
   #1) initial setup and checks of input----
   varnames <- variable.names(object)
   if(is.null(varnames)) stop("Please input proper linear model object")
+  varnames <- gsub("(\\(Intercept\\))", "Intercept", varnames) 
   
   betahat <- object$coefficients
   k <- length(varnames)
@@ -88,17 +89,12 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
   b <- (k + 1) / n
   
   if(hyp == "exploratory"){
-    if(!isTRUE(priorprob == 1)) stop('"exploratory" option requires equal (default) priorprobs')
-    if("(Intercept)" %in% varnames){ #because intercept does not seem to work, remove, but not remove completely yet
-      varnames_i <- varnames[-1]
-    }else{
-      varnames_i <- varnames
-    }
-    hyp <- vector("list", length(varnames_i)) #list with hyps for all variables
-    BF_matrices <- vector("list", length(varnames_i)) #save output
-    list_post_prob <- vector("list", length(varnames_i)) #save output
-    for(IV in seq_along(varnames_i)){
-      hyp[[IV]] <- paste(varnames_i[IV], "< 0;", varnames_i[IV], "= 0;", varnames_i[IV], "> 0", sep = " ")
+    if(!isTRUE(priorprob == 1)) stop('"exploratory" option requires priorprobs = 1 (default) ')
+    hyp <- vector("list", length(varnames)) 
+    BF_matrices <- vector("list", length(varnames))
+    list_post_prob <- vector("list", length(varnames))
+    for(IV in seq_along(varnames)){
+      hyp[[IV]] <- paste(varnames[IV], "< 0;", varnames[IV], "= 0;", varnames[IV], "> 0", sep = " ")
       
     }
   } 
@@ -106,6 +102,7 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
   for(loop in seq_along(hyp)){ #If 'exploratory' option loop over all variables, else specified hyp
     
     hyp2 <- gsub("[ \n]", "", hyp[[loop]])
+    hyp2 <- gsub("(\\(Intercept\\))", "Intercept", hyp2) 
     if(!grepl("^[0-9a-zA-Z><=,;().-]+$", hyp2)) stop("Impermissable characters in hypotheses.")
     if(grepl("[><=]{2,}", hyp2)) stop("Do not use combined comparison signs e.g., '>=' or '=='")
     
@@ -546,6 +543,8 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
     BF_matrix <- matrix(rep(BFu, length(BFu)), ncol = length(BFu), byrow = TRUE)
     BF_matrix <- t(BF_matrix / BFu)
     colnames(BF_matrix) <- rownames(BF_matrix) <- names(BFu)
+    BF_matrix[is.nan(BF_matrix)] <- 0
+    diag(BF_matrix) <- 1
     
     if(length(hyp) > 1){ 
       BF_matrices[[loop]] <- round(BF_matrix, digits = 3)
@@ -558,7 +557,8 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
     matrix_post_prob <- matrix(do.call(rbind, list_post_prob), ncol = 3)
     
     colnames(matrix_post_prob) <- c("X < 0", "X = 0", "x > 0")
-    names(BF_matrices) <- rownames(matrix_post_prob) <- varnames_i
+    varnames <- gsub("Intercept", "(Intercept)", varnames)
+    names(BF_matrices) <- rownames(matrix_post_prob) <- varnames
     
     out <- list(BF_matrix = BF_matrices, post_prob = matrix_post_prob,
                 hypotheses = hyp_out)
