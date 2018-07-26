@@ -556,7 +556,7 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
   if(length(hyp) > 1){
     matrix_post_prob <- matrix(do.call(rbind, list_post_prob), ncol = 3)
     
-    colnames(matrix_post_prob) <- c("X < 0", "X = 0", "x > 0")
+    colnames(matrix_post_prob) <- c("H1", "H2", "H3")
     varnames <- gsub("Intercept", "(Intercept)", varnames)
     names(BF_matrices) <- rownames(matrix_post_prob) <- varnames
     

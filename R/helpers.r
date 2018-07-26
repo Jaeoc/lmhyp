@@ -40,7 +40,7 @@ print.hyp <- function(x, ...){ #print method. Has to include the x and ...
     }
   } else{
     
-    cat("Exploratory hypotheses:")
+    cat("Hypotheses:")
     cat("\n")
     cat("\n")
     for(h in seq_along(x$hypotheses)){
@@ -48,10 +48,14 @@ print.hyp <- function(x, ...){ #print method. Has to include the x and ...
       cat("\n")
     }
     cat("\n")
-    cat(paste0("Posterior probabilities for each variable (rounded):"))
+    cat("Posterior probabilities for each variable (rounded), ")
+    cat("\n")
+    cat("assuming equal prior probabilities:")
     cat("\n")
     cat("\n")
-    mat_out <- as.data.frame(format(round(x$post_prob, digits = 3), scientific = FALSE))
+    mat_out <- as.data.frame(format(round(x$post_prob, digits = 3), scientific = FALSE), stringsAsFactors = FALSE)
+    mat_out <- rbind(c("X < 0", "X = 0", "X > 0"), mat_out) 
+    rownames(mat_out) <- c("", rownames(x$post_prob)) 
     print(mat_out)
   }
 }
