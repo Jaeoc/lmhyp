@@ -3,7 +3,7 @@
 lmhyp
 =====
 
-This package provides an easy way to test hypotheses about continuous predictors in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is forthcoming.
+This package provides an easy way to test hypotheses about coefficients in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is forthcoming.
 
 Basic example
 -------------
@@ -26,9 +26,9 @@ test_hyp(fit, hyp)
 #> 
 #> Posterior probability of each hypothesis (rounded):
 #> 
-#>   H1:   0.0302
-#>   H2:   0.5021
-#>   H3:   0.4677
+#>   H1:   0.030
+#>   H2:   0.502
+#>   H3:   0.468
 ```
 
 Installation
@@ -46,7 +46,7 @@ Usage
 
 This function is based on a Bayes factor method by Mulder (2014). In essence, it uses a number of observations equal to the number of predictors in the linear model to construct a minimally informative prior, and the remainder of the observations are then used to test the hypotheses.
 
-The function `test_hyp` takes as primary input a linear model object and a string vector specifying hypotheses. Simply specify the linear model as you normally would in R using `lm`, although for interpretation purposes it is preferable to standardize variables first.
+The function `test_hyp` takes as primary input a linear model object and a string vector specifying hypotheses. Simply specify the linear model as you normally would in R using `lm`. If hypotheses involve multiple variables it is typically preferable to standardize the variables first to facilitate interpretation.
 
 ``` r
 fit <- lm(mpg ~ disp + hp + wt, data = dt)
@@ -90,7 +90,7 @@ result <- test_hyp(fit, H1v2)
 
 When specified hypotheses are overlapping as in this case (in both hypotheses wt &lt; 0) the function takes slightly longer to finish since it runs 1e4 Monte Carlo iterations to check the extent of the overlap.
 
-The function gives as output which hypotheses were specified and the posterior probability of each hypothesis. If the input hypotheses are not exhaustive (i.e., do not cover the full parameter space), the posterior probability of the complement is also output. The complement is the hypothesis that neither of the input hypotheses is true. In the current case we get the following output:
+The function gives as primary output which hypotheses were specified and the posterior probability of each hypothesis. If the input hypotheses are not exhaustive (i.e., do not cover the full parameter space), the posterior probability of the complement is also output. The complement is the hypothesis that neither of the input hypotheses is true. In the current case we get the following output:
 
 ``` r
 result
@@ -102,22 +102,66 @@ result
 #> 
 #> Posterior probability of each hypothesis (rounded):
 #> 
-#>   H1:   0.9915
-#>   H2:   0.0027
-#>   Hc:   0.0058
+#>   H1:   0.991
+#>   H2:   0.003
+#>   Hc:   0.006
 ```
 
 We see that there is strong evidence in the data for H1 and very weak evidence for H2 and the complement Hc. Exactly how the hypotheses compare to each other we can find out by printing the Bayes factor matrix:
 
 ``` r
 result$BF_matrix
-#>          H1          H2          Hc
-#> H1   1.0000 0.002741001 0.005866392
-#> H2 364.8302 1.000000000 2.140237177
-#> Hc 170.4625 0.467237935 1.000000000
+#>       H1      H2      Hc
+#> H1 1.000 356.994 166.581
+#> H2 0.003   1.000   0.467
+#> Hc 0.006   2.143   1.000
 ```
 
-By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is 365 times as likely as H2 (BF = 364.83) and 170 times as likely as the complement (BF = 170.46).
+By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior by default is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is 357 times as likely as H2 (*B*<sub>12</sub> = 356.99) and 167 times as likely as the complement (*B*<sub>1*c*</sub> = 166.58).
+
+It is also possible to specify one's own prior probabilites as a vector of numbers. These must then be specified for all hypotheses, including the complement if one exists. The function will throw an error if too few or too many probabilites have been specified. They can be specified both as probabilites, e.g, c(0.5, 0.2, 0.3) or as relative weights, e.g., c(5, 2, 3). In the latter case the function will normalize the input values. So for our example we might get:
+
+``` r
+test_hyp(fit, H1v2, c(5, 2, 3))
+#> Warning in test_hyp(fit, H1v2, c(5, 2, 3)): priorprobs did not sum to 1 and
+#> have been normalized. Used priorprobs: 0.5 0.2 0.3
+#> Hypotheses:
+#> 
+#>   H1:   "wt<(disp,hp)<0"
+#>   H2:   "wt<(disp,hp)=0"
+#>   Hc:   "Not H1-H2"
+#> 
+#> Posterior probability of each hypothesis (rounded):
+#> 
+#>   H1:   0.995
+#>   H2:   0.001
+#>   Hc:   0.004
+```
+
+As can be seen the posterior probabilites are now different from when we used the default equal prior probabilites.
+
+An alternative to specifying explicit hypotheses is to specify the option "exploratory". This will print the posterior probabilites for the hypotheses "X &lt; 0; X = 0; X &gt; 0" for all variables, including the intercept, and assumes equal prior probabilities.
+
+``` r
+test_hyp(fit, "exploratory")
+#> Hypotheses:
+#> 
+#>   H1:   "X < 0"
+#>   H2:   "X = 0"
+#>   H3:   "X > 0"
+#> 
+#> Posterior probabilities for each variable (rounded), 
+#> assuming equal prior probabilities:
+#> 
+#>                H1    H2    H3
+#>             X < 0 X = 0 X > 0
+#> (Intercept) 0.117 0.767 0.117
+#> disp        0.125 0.766 0.109
+#> hp          0.897 0.098 0.005
+#> wt          0.985 0.014 0.001
+```
+
+Also here it would be possible to ask for the BF\_matrix for each variable if we had saved the test as an object.
 
 References
 ----------

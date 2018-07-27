@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
 ```
 
 # lmhyp
-This package provides an easy way to test hypotheses about continuous predictors in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is forthcoming.
+This package provides an easy way to test hypotheses about coefficients in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is forthcoming.
 
 
 ## Basic example
@@ -44,7 +44,7 @@ devtools::install_github("Jaeoc/lmhyp")
 
 This function is based on a Bayes factor method by Mulder (2014). In essence, it uses a number of observations equal to the number of predictors in the linear model to construct a minimally informative prior, and the remainder of the observations are then used to test the hypotheses.
 
-The function `test_hyp` takes as primary input a linear model object and a string vector specifying hypotheses. Simply specify the linear model as you normally would in R using `lm`, although for interpretation purposes it is preferable to standardize variables first. 
+The function `test_hyp` takes as primary input a linear model object and a string vector specifying hypotheses. Simply specify the linear model as you normally would in R using `lm`. If hypotheses involve multiple variables it is typically preferable to standardize the variables first to facilitate interpretation. 
 
 ```{r, eval = FALSE}
 fit <- lm(mpg ~ disp + hp + wt, data = dt)
@@ -88,7 +88,7 @@ result <- test_hyp(fit, H1v2)
 
 When specified hypotheses are overlapping as in this case (in both hypotheses wt < 0) the function takes slightly longer to finish since it runs 1e4 Monte Carlo iterations to check the extent of the overlap. 
 
-The function gives as output which hypotheses were specified and the posterior probability of each hypothesis. If the input hypotheses are not exhaustive (i.e., do not cover the full parameter space), the posterior probability of the complement is also output. The complement is the hypothesis that neither of the input hypotheses is true. In the current case we get the following output:
+The function gives as primary output which hypotheses were specified and the posterior probability of each hypothesis. If the input hypotheses are not exhaustive (i.e., do not cover the full parameter space), the posterior probability of the complement is also output. The complement is the hypothesis that neither of the input hypotheses is true. In the current case we get the following output:
 
 ```{r}
 result
@@ -100,7 +100,23 @@ We see that there is strong evidence in the data for H1 and very weak evidence f
 result$BF_matrix
 ```
 
-By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is `r round(result$BF_matrix[2, 1], 0)` times as likely as H2 (BF = `r round(result$BF_matrix[2, 1], 2)`) and `r round(result$BF_matrix[3, 1], 0)` times as likely as the complement (BF = `r round(result$BF_matrix[3, 1], 2)`). 
+By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior by default is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is `r round(result$BF_matrix[1, 2], 0)` times as likely as H2 ($B_{12}$ = `r round(result$BF_matrix[1, 2], 2)`) and `r round(result$BF_matrix[1, 3], 0)` times as likely as the complement ($B_{1c}$ = `r round(result$BF_matrix[1, 3], 2)`). 
+
+It is also possible to specify one's own prior probabilites as a vector of numbers. These must then be specified for all hypotheses, including the complement if one exists. The function will throw an error if too few or too many probabilites have been specified. They can be specified both as probabilites, e.g, c(0.5, 0.2, 0.3) or as relative weights, e.g., c(5, 2, 3). In the latter case the function will normalize the input values. So for our example we might get:
+
+```{r}
+test_hyp(fit, H1v2, c(5, 2, 3))
+```
+
+As can be seen the posterior probabilites are now different from when we used the default equal prior probabilites.
+
+An alternative to specifying explicit hypotheses is to specify the option "exploratory". This will print the posterior probabilites for the hypotheses "X < 0; X = 0; X > 0" for all variables, including the intercept, and assumes equal prior probabilities. 
+
+```{r}
+test_hyp(fit, "exploratory")
+```
+
+Also here it would be possible to ask for the BF_matrix for each variable if we had saved the test as an object.
 
 ## References
 Mulder, J. (2014). Prior adjusted default Bayes factors for testing (in) equality constrained hypotheses. Computational Statistics & Data Analysis, 71, 448-463.
