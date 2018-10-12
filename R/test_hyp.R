@@ -136,7 +136,7 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
     for(no in seq_along(hyp_out)){names(hyp_out)[no] <- paste0("H", no)}
     if(!isTRUE(priorprob == 1) && length(priorprob) < length(hyp_out)) stop("Use default equal priorprob or specify priorprob for all hypotheses")
     hyps <- unlist(strsplit(hyp2, split = ";"))
-    BFu <- rep(NA, length = length(hyps))
+    BFu <- out_c_E <- out_f_E <- out_c_i_e <- out_f_i_e <- rep(NA, length = length(hyps))
     
     BFip_posterior <- if(any(!grepl("=", hyps))) {rep(NA, sum(!grepl("=", hyps)))} else{NULL}
     if(!is.null(BFip_posterior)) {
@@ -356,6 +356,10 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
         log_BF <- mvtnorm::dmvt(x = t(r_e), delta = delta, sigma = scale_post, df = n - k, log = TRUE) -
           mvtnorm::dmvt(x = t(r_e), delta = delta_zero, sigma = scale_prior, df = n*b - k, log = TRUE)
         
+        f_E <- mvtnorm::dmvt(x = t(r_e), delta = delta, sigma = scale_post, df = n - k, log = FALSE) 
+        c_E <- mvtnorm::dmvt(x = t(r_e), delta = delta_zero, sigma = scale_prior, df = n*b - k, log = FALSE)
+        c_i_e <- f_i_e <- NA
+        
         BF <- exp(log_BF)
         
       } else if(comparisons == "only inequality"){
@@ -381,11 +385,11 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
           scale_prior <- s2 * RX / (n*b - k)
           
           if(nrow(scale_post) == 1){ #If univariate
-            prior_prob <- pt((r_i - delta_zero) / sqrt(scale_prior), df = n*b - k, lower.tail = FALSE)[1]
-            posterior_prob <- pt((r_i - delta) / sqrt(scale_post), df = n - k, lower.tail = FALSE)[1]
-            BF <- posterior_prob / prior_prob
-          } else { #If multivariate
-            prior_prob <- mvtnorm::pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_prior, df = n*b - k, type = "shifted")[1]
+            prior_prob <- pt((r_i - delta_zero) / sqrt(scale_prior), df = n*b - k, lower.tail = FALSE)[1] 
+            posterior_prob <- pt((r_i - delta) / sqrt(scale_post), df = n - k, lower.tail = FALSE)[1] 
+            BF <- posterior_prob / prior_prob #prior
+          } else { #if multivariate
+            prior_prob <- mvtnorm::pmvt(lower = r_i, upper = Inf, delta = delta_zero, sigma = scale_prior, df = n*b - k, type = "shifted")[1] 
             posterior_prob <- mvtnorm::pmvt(lower = r_i, upper = Inf, delta = delta, sigma = scale_post, df = n - k, type = "shifted")[1]
             BF <- posterior_prob / prior_prob
           }
@@ -407,6 +411,11 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
           BF <- posterior_prob / prior_prob
           
         }
+        
+        c_i_e <- prior_prob 
+        f_i_e <- posterior_prob 
+        f_E <- NA
+        c_E <- NA
         
         BFip_prior[ineq_marker] <- prior_prob
         BFip_posterior[ineq_marker] <- posterior_prob
@@ -442,6 +451,9 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
         #Equality BF
         log_BF <- mvtnorm::dmvt(x = t(r_e), delta = w_post[1:q_e], sigma = matrix(K_post[1:q_e, 1:q_e], ncol = q_e), df = n - k, log = TRUE) -
           mvtnorm::dmvt(x = t(r_e), delta = w_prior[1:q_e], sigma = matrix(K_prior[1:q_e, 1:q_e], ncol = q_e), df = n*b - k, log = TRUE)
+        
+        f_E <- mvtnorm::dmvt(x = t(r_e), delta = w_post[1:q_e], sigma = matrix(K_post[1:q_e, 1:q_e], ncol = q_e), df = n - k, log = FALSE)
+        c_E <- mvtnorm::dmvt(x = t(r_e), delta = w_prior[1:q_e], sigma = matrix(K_prior[1:q_e, 1:q_e], ncol = q_e), df = n*b - k, log = FALSE)
         
         BFe <- exp(log_BF)
         
@@ -489,11 +501,15 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
           scale_prior_trans <- R_iv %*% K_2g1_prior %*% t(R_iv)
           
           if(nrow(scale_post_trans) == 1){ #If univariate
-            BFi <- pt((r_iv - delta_post) / sqrt(scale_post_trans), df = n - k + q_e, lower.tail = FALSE)[1] /
-              pt((r_iv - delta_prior) / sqrt(scale_prior_trans), df = n*b - k + q_e, lower.tail = FALSE)[1]
+            posterior_prob <- pt((r_iv - delta_post) / sqrt(scale_post_trans), df = n - k + q_e, lower.tail = FALSE)[1]  
+            prior_prob <-   pt((r_iv - delta_prior) / sqrt(scale_prior_trans), df = n*b - k + q_e, lower.tail = FALSE)[1] 
+            
+            BFi <- posterior_prob / prior_prob 
           } else { #if multivariate
-            BFi <- mvtnorm::pmvt(lower = r_iv, upper = Inf, delta = delta_post, sigma = scale_post_trans, df = n - k + q_e, type = "shifted")[1] /
-              mvtnorm::pmvt(lower = r_iv, upper = Inf, delta = delta_prior, sigma = scale_prior_trans, df = n*b - k + q_e, type = "shifted")[1]
+            posterior_prob <- mvtnorm::pmvt(lower = r_iv, upper = Inf, delta = delta_post, sigma = scale_post_trans, df = n - k + q_e, type = "shifted")[1] 
+            prior_prob <- mvtnorm::pmvt(lower = r_iv, upper = Inf, delta = delta_prior, sigma = scale_prior_trans, df = n*b - k + q_e, type = "shifted")[1] 
+            
+            BFi <- posterior_prob / prior_prob 
           }
           
         } else{
@@ -503,15 +519,24 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
           draws_post <- mvtnorm::rmvt(n = mcrep, delta = w_2g1_post, sigma = K_2g1_post, df = n - k + q_e)
           draws_prior <- mvtnorm::rmvt(n = mcrep, delta = w_2g1_prior, sigma = K_2g1_prior, df = n*b - k + q_e)
           
-          BFi <- mean(apply(draws_post%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod)) /
-            mean(apply(draws_prior%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod))
+          posterior_prob <- mean(apply(draws_post%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod)) 
+          prior_prob <- mean(apply(draws_prior%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod))
+          
+          BFi <- posterior_prob / prior_prob
           
         }
+        c_i_e <- prior_prob 
+        f_i_e <- posterior_prob
         
         #Total BF
         BF <- BFe * BFi
         
       } #end 'both comparisons' option
+      
+      out_c_E[h] <- c_E 
+      out_f_E[h] <- f_E
+      out_c_i_e[h] <- c_i_e
+      out_f_i_e[h] <- f_i_e 
       
       BFu[h] <- BF #hypothesis vs. unconstrained
       names(BFu)[[h]] <- paste0("H", h)
@@ -521,6 +546,9 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
     if(!is.null(BFip_posterior)){
       if(length(BFip_posterior) == 1){
         BFc <- (1 - BFip_posterior) / (1 - BFip_prior)
+        comp_fie <- (1 - BFip_posterior) 
+        comp_cie <- (1 - BFip_prior) 
+        comp_fe <- comp_ce <- NA
       } else{
         R_i_overlap <- do.call(rbind, R_i_all)
         r_i_overlap <- do.call(rbind, r_i_all)
@@ -529,12 +557,14 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
         exhaustive <- mean(rowSums(ineq_draws_prior%*%t(R_i_overlap) > rep(1, 1e4)%*%t(r_i_overlap)) > 0)
         
         if(exhaustive == 1){
-          BFc <- NULL
+          BFc <- comp_cie <- comp_fie <- comp_fe <- comp_ce <- NULL
         } else{
           overlap <- mean(apply(ineq_draws_prior%*%t(R_i_overlap) > rep(1, 1e4)%*%t(r_i_overlap), 1, prod))
           
           if(overlap == 0){
             BFc <-  (1 - sum(BFip_posterior)) / (1 - sum(BFip_prior))
+            comp_fie <- (1 - sum(BFip_posterior)) 
+            comp_cie <- (1 - sum(BFip_prior)) 
           } else{
             ineq_draws_posterior <- mvtnorm::rmvt(n = 1e4, delta = betahat, sigma = vcov(object), df = n - k)
             
@@ -543,12 +573,19 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
             
             prob_prior <- mean(Reduce(`+`, constraints_prior) > 0)
             prob_posterior <- mean(Reduce(`+`, constraints_posterior) > 0)
+            
             BFc <- (1 - prob_posterior) / (1 - prob_prior)
+            comp_fie <- (1 - prob_posterior) 
+            comp_cie <- (1 - prob_prior) 
           }
+          comp_fe <- comp_ce <- NA
         }
       }
     } else{
       BFc <- 1
+      comp_ce <- 1
+      comp_fe <- 1
+      comp_fie <- comp_cie <- NA
     }
     
     if(!is.null(BFc)){names(BFc) <- "Hc"}
@@ -583,11 +620,19 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
     names(BF_matrices) <- rownames(matrix_post_prob) <- varnames
     
     out <- list(BF_matrix = BF_matrices, post_prob = matrix_post_prob,
-                hypotheses = hyp_out)
+                hypotheses = hyp_out, BF_computation = "Not available when option 'exploratory' chosen.")
     
   } else{
+    out_c_i_e <- c(out_c_i_e, comp_cie)
+    out_f_i_e <- c(out_f_i_e, comp_fie)
+    out_c_E <- c(out_c_E, comp_ce)
+    out_f_E <- c(out_f_E, comp_fe)
+    BF_computation <- as.matrix(data.frame(out_c_E, out_c_i_e, c = out_c_E*out_c_i_e, out_f_E, out_f_i_e,
+                                           f = out_f_E*out_f_i_e, BFu, PP_t = out_hyp_prob))
+    colnames(BF_computation) <- c("c(E)", "C(I|E)", "c", "f(E)", "f(I|E)", "f", "B(t,u)", "PP(t)")
+    
     out <- list(BF_matrix = round(BF_matrix, digits = 3),post_prob = out_hyp_prob, 
-                hypotheses = hyp_out)
+                hypotheses = hyp_out, BF_computation = BF_computation)
   }
   class(out) <- "hyp"
   out
