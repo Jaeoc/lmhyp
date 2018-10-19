@@ -21,4 +21,4 @@ Imports:
     Matrix,
 	pracma,
 	MASS
-RoxygenNote: 6.0.1
+RoxygenNote: 6.1.0

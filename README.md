@@ -112,12 +112,12 @@ We see that there is strong evidence in the data for H1 and very weak evidence f
 ``` r
 result$BF_matrix
 #>       H1      H2      Hc
-#> H1 1.000 356.994 166.581
+#> H1 1.000 359.042 167.792
 #> H2 0.003   1.000   0.467
-#> Hc 0.006   2.143   1.000
+#> Hc 0.006   2.140   1.000
 ```
 
-By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior by default is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is 357 times as likely as H2 (*B*<sub>12</sub> = 356.99) and 167 times as likely as the complement (*B*<sub>1*c*</sub> = 166.58).
+By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior by default is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is 359 times as likely as H2 (*B*<sub>12</sub> = 359.04) and 168 times as likely as the complement (*B*<sub>1*c*</sub> = 167.79).
 
 It is also possible to specify one's own prior probabilites as a vector of numbers. These must then be specified for all hypotheses, including the complement if one exists. The function will throw an error if too few or too many probabilites have been specified. They can be specified both as probabilites, e.g, c(0.5, 0.2, 0.3) or as relative weights, e.g., c(5, 2, 3). In the latter case the function will normalize the input values. So for our example we might get:
 
@@ -135,7 +135,7 @@ test_hyp(fit, H1v2, c(5, 2, 3))
 #> 
 #>   H1:   0.995
 #>   H2:   0.001
-#>   Hc:   0.004
+#>   Hc:   0.003
 ```
 
 As can be seen the posterior probabilites are now different from when we used the default equal prior probabilites.
@@ -162,6 +162,30 @@ test_hyp(fit, "exploratory")
 ```
 
 Also here it would be possible to ask for the BF\_matrix for each variable if we had saved the test as an object.
+
+Finally, the function provides some supplementary output intended to provide a deeper understanding of the underlying method and primary output. Calling BF\_computation illustrates the computation of the Bayes factor of each hypothesis against the unconstrained hypothesis. In the output c(E) is the prior density, c(I|E) the prior probability, c the product of these two, and columns prefixed with "f" the equivalent for the posterior. B(t,u) is the Bayes factor of hypothesis t against the unconstrained (u) and PP(t) is the posterior probability of t.
+
+``` r
+round(result$BF_computation,2)
+#>    c(E) C(I|E)    c f(E) f(I|E)    f B(t,u) PP(t)
+#> H1   NA    0.0   NA   NA   0.43   NA  96.74  0.99
+#> H2 0.26    0.5 0.13 0.03   1.00 0.03   0.27  0.00
+#> Hc   NA    1.0   NA   NA   0.57   NA   0.58  0.01
+```
+
+Note that I round the output here for more convenient presentation. Thus, the Bayes factor against the unconstrained hypothesis is calculated as f(I|E) / c(I|E) = B(t, u) and the posterior probability, for say *H*<sub>1</sub>, as PP(1) = B(1, u) / \[B(1,u) + B(2,u) + B(c, u)\] = 0.99.
+
+The second supplementary output we can ask for is 90% credibility intervals around the Bayes factors against the constrained hypothesis. In most cases our method uses an analytic solution, but under some circumstances (when the matrix with the coefficients of the order constraints is not of full row rank) it uses a numerical solution with the number of draws equal to the input value mcrep (by default 1e6). This is the case for the current example and we might then print these uncertainty intervals by calling BFu\_CI:
+
+``` r
+round(result$BFu_CI,2)
+#>    B(t,u) lb. (5%) ub. (95%)
+#> H1  96.74    94.39     99.19
+#> H2   0.27     0.27      0.27
+#> Hc   0.58     0.58      0.58
+```
+
+Here the Bayes factor and its lower and upper bound is presented in all cases where this is relevant.
 
 References
 ----------
