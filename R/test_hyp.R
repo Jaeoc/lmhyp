@@ -136,12 +136,11 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
     for(no in seq_along(hyp_out)){names(hyp_out)[no] <- paste0("H", no)}
     if(!isTRUE(priorprob == 1) && length(priorprob) < length(hyp_out)) stop("Use default equal priorprob or specify priorprob for all hypotheses")
     hyps <- unlist(strsplit(hyp2, split = ";"))
-    BFu <- out_c_E <- out_f_E <- out_c_i_e <- out_f_i_e <- rep(NA, length = length(hyps))
+    BFu <- out_c_E <- out_f_E <- out_c_i_e <- out_f_i_e <- out_ci_lb <- out_ci_ub <- rep(NA, length = length(hyps))
     
     BFip_posterior <- if(any(!grepl("=", hyps))) {rep(NA, sum(!grepl("=", hyps)))} else{NULL}
     if(!is.null(BFip_posterior)) {
-      R_i_all <- vector("list", length =  length(BFip_posterior))
-      r_i_all <- vector("list", length =  length(BFip_posterior))
+      R_i_all <- r_i_all <- BFi_draws_post <- BFi_draws_prior <- vector("list", length =  length(BFip_posterior))
       ineq_marker <- 0
       BFip_prior <- BFip_posterior
     }
@@ -362,6 +361,8 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
         
         BF <- exp(log_BF)
         
+        ci_lb <- ci_ub <- NA
+        
       } else if(comparisons == "only inequality"){
         #**3.2)only-inequality----
         
@@ -394,6 +395,9 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
             BF <- posterior_prob / prior_prob
           }
           
+          ci_lb <- ci_ub <- NA
+          ci_draws_post <- ci_draws_prior <- NULL
+          
         } else{ #No transformation is possible.
           if(!is.numeric(mcrep) || !mcrep %% 1 == 0) stop("Input for mcrep should be an integer")
           
@@ -410,18 +414,28 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
           posterior_prob <- mean(apply(draws_post%*%t(R_i) > rep(1, mcrep)%*%t(r_i), 1, prod))
           BF <- posterior_prob / prior_prob
           
+          #Credibility interval
+          x_post <- sum(apply(draws_post%*%t(R_i) > rep(1, mcrep)%*%t(r_i), 1, prod))
+          x_prior <- sum(apply(draws_prior%*%t(R_i) > rep(1, mcrep)%*%t(r_i), 1, prod))
+          ci_draws_post <- rbeta(1e4, x_post, 1 + mcrep - x_post)
+          ci_draws_prior <- rbeta(1e4, x_prior, 1 + mcrep - x_prior)
+          BF_draws <- ci_draws_post / ci_draws_prior
+          
+          ci_lb <- quantile(sort(BF_draws), 0.05)
+          ci_ub <- quantile(sort(BF_draws), 0.95)
+          
         }
         
         c_i_e <- prior_prob 
         f_i_e <- posterior_prob 
-        f_E <- NA
-        c_E <- NA
+        f_E <- c_E <- NA
         
         BFip_prior[ineq_marker] <- prior_prob
         BFip_posterior[ineq_marker] <- posterior_prob
         R_i_all[[ineq_marker]] <- R_i
         r_i_all[[ineq_marker]] <- matrix(r_i)
-        
+        BFi_draws_post[ineq_marker] <- list(ci_draws_post)
+        BFi_draws_prior[ineq_marker] <- list(ci_draws_prior)
         
       } else{
         
@@ -512,6 +526,8 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
             BFi <- posterior_prob / prior_prob 
           }
           
+          ci_lb <- ci_ub <- NA
+          
         } else{
           if(!is.numeric(mcrep) || !mcrep %% 1 == 0) stop("Input for mcrep should be an integer")
           
@@ -524,6 +540,16 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
           
           BFi <- posterior_prob / prior_prob
           
+          #Credibility interval
+          x_post <- sum(apply(draws_post%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod))
+          x_prior <- sum(apply(draws_prior%*%t(R_iv) > rep(1,mcrep)%*%t(r_iv),1,prod))
+          ci_draws_post <- rbeta(1e4, x_post, 1 + mcrep - x_post)
+          ci_draws_prior <- rbeta(1e4, x_prior, 1 + mcrep - x_prior)
+          BF_draws <- ci_draws_post / ci_draws_prior
+          
+          ci_lb <- quantile(sort(BF_draws), 0.05)
+          ci_ub <- quantile(sort(BF_draws), 0.95)
+          
         }
         c_i_e <- prior_prob 
         f_i_e <- posterior_prob
@@ -531,12 +557,17 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
         #Total BF
         BF <- BFe * BFi
         
+        ci_lb <- ci_lb*BFe
+        ci_ub <- ci_ub*BFe
+        
       } #end 'both comparisons' option
       
       out_c_E[h] <- c_E 
       out_f_E[h] <- f_E
       out_c_i_e[h] <- c_i_e
-      out_f_i_e[h] <- f_i_e 
+      out_f_i_e[h] <- f_i_e
+      out_ci_lb[h] <- ci_lb
+      out_ci_ub[h] <- ci_ub
       
       BFu[h] <- BF #hypothesis vs. unconstrained
       names(BFu)[[h]] <- paste0("H", h)
@@ -549,6 +580,18 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
         comp_fie <- (1 - BFip_posterior) 
         comp_cie <- (1 - BFip_prior) 
         comp_fe <- comp_ce <- NA
+        
+        #Credibility interval
+        if(length(Filter(Negate(is.null), BFi_draws_post)) == 0){
+          BFc_ci_lb <- BFc_ci_ub <- NA
+        }else{
+          BFc_draws_post <- 1 - unlist(BFi_draws_post)
+          BFc_draws_prior <- 1 - unlist(BFi_draws_prior)
+          
+          BFc_draws <- BFc_draws_post / BFc_draws_prior
+          BFc_ci_lb <- quantile(sort(BFc_draws), 0.05)
+          BFc_ci_ub <- quantile(sort(BFc_draws), 0.95)
+        }
       } else{
         R_i_overlap <- do.call(rbind, R_i_all)
         r_i_overlap <- do.call(rbind, r_i_all)
@@ -557,14 +600,31 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
         exhaustive <- mean(rowSums(ineq_draws_prior%*%t(R_i_overlap) > rep(1, 1e4)%*%t(r_i_overlap)) > 0)
         
         if(exhaustive == 1){
-          BFc <- comp_cie <- comp_fie <- comp_fe <- comp_ce <- NULL
+          BFc <- comp_cie <- comp_fie <- comp_fe <- comp_ce <- BFc_ci_lb <- BFc_ci_ub <- NULL
         } else{
           overlap <- mean(apply(ineq_draws_prior%*%t(R_i_overlap) > rep(1, 1e4)%*%t(r_i_overlap), 1, prod))
           
           if(overlap == 0){
             BFc <-  (1 - sum(BFip_posterior)) / (1 - sum(BFip_prior))
             comp_fie <- (1 - sum(BFip_posterior)) 
-            comp_cie <- (1 - sum(BFip_prior)) 
+            comp_cie <- (1 - sum(BFip_prior))
+            
+            #Credibility interval
+            if(length(Filter(Negate(is.null), BFi_draws_post)) == 0){
+              BFc_ci_lb <- BFc_ci_ub <- NA
+            }else{
+              analytic_BFip_posterior <- BFip_posterior[which(unlist(lapply(BFi_draws_post, is.null)) == 1)]
+              num_draws_BFip_posterior <- Filter(Negate(is.null),BFi_draws_post)
+              BFc_draws_post <- 1 - sum(analytic_BFip_posterior) - Reduce(`-`, num_draws_BFip_posterior)
+              
+              analytic_BFip_prior <- BFip_prior[which(unlist(lapply(BFi_draws_prior, is.null)) == 1)]
+              num_draws_BFip_prior <- Filter(Negate(is.null),BFi_draws_prior)
+              BFc_draws_prior <- 1 - sum(analytic_BFip_prior) - Reduce(`-`, num_draws_BFip_prior)
+              
+              BFc_draws <- BFc_draws_post / BFc_draws_prior
+              BFc_ci_lb <- quantile(sort(BFc_draws), 0.05)
+              BFc_ci_ub <- quantile(sort(BFc_draws), 0.95)
+            }
           } else{
             ineq_draws_posterior <- mvtnorm::rmvt(n = 1e4, delta = betahat, sigma = vcov(object), df = n - k)
             
@@ -576,7 +636,17 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
             
             BFc <- (1 - prob_posterior) / (1 - prob_prior)
             comp_fie <- (1 - prob_posterior) 
-            comp_cie <- (1 - prob_prior) 
+            comp_cie <- (1 - prob_prior)
+            
+            #Credibility interval
+            x_post <- 1e4 - sum(Reduce(`+`, constraints_posterior) > 0)
+            x_prior <- 1e4 - sum(Reduce(`+`, constraints_prior) > 0)
+            ci_draws_post <- rbeta(1e4, x_post, 1 + 1e4 - x_post) 
+            ci_draws_prior <- rbeta(1e4, x_prior, 1 + 1e4 - x_prior) 
+            BFc_draws <- ci_draws_post / ci_draws_prior
+            
+            BFc_ci_lb <- quantile(sort(BFc_draws), 0.05)
+            BFc_ci_ub <- quantile(sort(BFc_draws), 0.95)
           }
           comp_fe <- comp_ce <- NA
         }
@@ -585,7 +655,7 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
       BFc <- 1
       comp_ce <- 1
       comp_fe <- 1
-      comp_fie <- comp_cie <- NA
+      comp_fie <- comp_cie <- BFc_ci_lb <- BFc_ci_ub <- NA
     }
     
     if(!is.null(BFc)){names(BFc) <- "Hc"}
@@ -620,19 +690,26 @@ test_hyp <- function(object, hyp, priorprob = 1, mcrep = 1e6){
     names(BF_matrices) <- rownames(matrix_post_prob) <- varnames
     
     out <- list(BF_matrix = BF_matrices, post_prob = matrix_post_prob,
-                hypotheses = hyp_out, BF_computation = "Not available when option 'exploratory' chosen.")
+                hypotheses = hyp_out, BF_computation = "Not available when option 'exploratory' chosen.",
+                BFu_CI = "Not available when option 'exploratory' chosen.")
     
   } else{
     out_c_i_e <- c(out_c_i_e, comp_cie)
     out_f_i_e <- c(out_f_i_e, comp_fie)
     out_c_E <- c(out_c_E, comp_ce)
     out_f_E <- c(out_f_E, comp_fe)
+    out_ci_lb <- c(out_ci_lb, BFc_ci_lb)
+    out_ci_ub <- c(out_ci_ub, BFc_ci_ub)
+    
     BF_computation <- as.matrix(data.frame(out_c_E, out_c_i_e, c = out_c_E*out_c_i_e, out_f_E, out_f_i_e,
                                            f = out_f_E*out_f_i_e, BFu, PP_t = out_hyp_prob))
     colnames(BF_computation) <- c("c(E)", "C(I|E)", "c", "f(E)", "f(I|E)", "f", "B(t,u)", "PP(t)")
     
+    BFu_ci <- as.matrix(data.frame(BFu, out_ci_lb, out_ci_ub))
+    colnames(BFu_ci) <- c("B(t,u)", "lb. (5%)", "ub. (95%)")
+    
     out <- list(BF_matrix = round(BF_matrix, digits = 3),post_prob = out_hyp_prob, 
-                hypotheses = hyp_out, BF_computation = BF_computation)
+                hypotheses = hyp_out, BF_computation = BF_computation, BFu_CI = BFu_ci)
   }
   class(out) <- "hyp"
   out
