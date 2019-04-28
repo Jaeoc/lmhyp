@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
 ```
 
 # lmhyp
-This package provides an easy way to test hypotheses about coefficients in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is forthcoming.
+This package provides an easy way to test hypotheses about coefficients in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is available at https://doi.org/10.3758/s13428-018-01196-9.
 
 
 ## Basic example
@@ -136,5 +136,7 @@ Here the Bayes factor and its lower and upper bound is presented in all cases wh
 
 ## References
 Mulder, J. (2014). Prior adjusted default Bayes factors for testing (in) equality constrained hypotheses. Computational Statistics & Data Analysis, 71, 448-463.
+
+J. Mulder, A. Olsson-Collentine (2019). Simple Bayesian Testing of Scientific Expectations in Linear Regression Models. Behavior Research Methods, https://doi.org/10.3758/s13428-018-01196-9.
 
 

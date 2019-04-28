@@ -3,7 +3,7 @@
 lmhyp
 =====
 
-This package provides an easy way to test hypotheses about coefficients in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is forthcoming.
+This package provides an easy way to test hypotheses about coefficients in multiple regression. Simply fit a linear model in R with `lm`, specify your hypotheses and test them with `test_hyp`. The package enables formal testing of hypotheses using a default Bayesian prior and is particularly useful for testing multiple contradicting hypotheses. A tutorial paper for the package is available at <https://doi.org/10.3758/s13428-018-01196-9>.
 
 Basic example
 -------------
@@ -112,12 +112,12 @@ We see that there is strong evidence in the data for H1 and very weak evidence f
 ``` r
 result$BF_matrix
 #>       H1      H2      Hc
-#> H1 1.000 359.042 167.792
-#> H2 0.003   1.000   0.467
-#> Hc 0.006   2.140   1.000
+#> H1 1.000 362.785 169.220
+#> H2 0.003   1.000   0.466
+#> Hc 0.006   2.144   1.000
 ```
 
-By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior by default is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is 359 times as likely as H2 (*B*<sub>12</sub> = 359.04) and 168 times as likely as the complement (*B*<sub>1*c*</sub> = 167.79).
+By definition, the Bayes Factor is interpreted as the likelihood of the data under a hypothesis compared to another. However, because the prior by default is the same for all hypotheses we can directly interpret the BFs as the likelihood of a hypothesis compared to another. Thus, given the data, H1 is 363 times as likely as H2 (*B*<sub>12</sub> = 362.79) and 169 times as likely as the complement (*B*<sub>1*c*</sub> = 169.22).
 
 It is also possible to specify one's own prior probabilites as a vector of numbers. These must then be specified for all hypotheses, including the complement if one exists. The function will throw an error if too few or too many probabilites have been specified. They can be specified both as probabilites, e.g, c(0.5, 0.2, 0.3) or as relative weights, e.g., c(5, 2, 3). In the latter case the function will normalize the input values. So for our example we might get:
 
@@ -135,7 +135,7 @@ test_hyp(fit, H1v2, c(5, 2, 3))
 #> 
 #>   H1:   0.995
 #>   H2:   0.001
-#>   Hc:   0.003
+#>   Hc:   0.004
 ```
 
 As can be seen the posterior probabilites are now different from when we used the default equal prior probabilites.
@@ -168,7 +168,7 @@ Finally, the function provides some supplementary output intended to provide a d
 ``` r
 round(result$BF_computation,2)
 #>    c(E) C(I|E)    c f(E) f(I|E)    f B(t,u) PP(t)
-#> H1   NA    0.0   NA   NA   0.43   NA  96.74  0.99
+#> H1   NA    0.0   NA   NA   0.43   NA  97.55  0.99
 #> H2 0.26    0.5 0.13 0.03   1.00 0.03   0.27  0.00
 #> Hc   NA    1.0   NA   NA   0.57   NA   0.58  0.01
 ```
@@ -180,7 +180,7 @@ The second supplementary output we can ask for is 90% credibility intervals arou
 ``` r
 round(result$BFu_CI,2)
 #>    B(t,u) lb. (5%) ub. (95%)
-#> H1  96.74    94.39     99.19
+#> H1  97.55    95.20    100.02
 #> H2   0.27     0.27      0.27
 #> Hc   0.58     0.58      0.58
 ```
@@ -191,3 +191,5 @@ References
 ----------
 
 Mulder, J. (2014). Prior adjusted default Bayes factors for testing (in) equality constrained hypotheses. Computational Statistics & Data Analysis, 71, 448-463.
+
+J. Mulder, A. Olsson-Collentine (2019). Simple Bayesian Testing of Scientific Expectations in Linear Regression Models. Behavior Research Methods, <https://doi.org/10.3758/s13428-018-01196-9>.
