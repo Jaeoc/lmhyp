@@ -1,5 +1,19 @@
 
+This package is no longer supported and updated.
+=====
+
+The functionality of this package has been incorporated into the more extensive R-package [BFpack](https://bfpack.info), which is under active development. A pre-print tutorial paper for BFpack is available [here](https://arxiv.org/abs/1911.07728).
+
 <!-- README.md is generated from README.Rmd. Please edit that file -->
+
+
+
+
+
+
+
+
+
 lmhyp
 =====
 
